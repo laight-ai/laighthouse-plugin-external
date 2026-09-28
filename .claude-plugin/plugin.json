@@ -1,0 +1,12 @@
+{
+  "name": "laighthouse-plugin-dahyeong",
+  "version": "1.0.0",
+  "description": "라이트하우스 분석 플러그인",
+  "author": {
+    "name": "LaightAI"
+  },
+  "keywords": [
+    "analytics",
+    "laighthouse"
+  ]
+}
