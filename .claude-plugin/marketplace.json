@@ -1,0 +1,24 @@
+{
+  "name": "laighthouse-plugin-external",
+  "description": "라이트하우스 외부 배포용 분석 플러그인 마켓플레이스",
+  "owner": {
+    "name": "LaightAI",
+    "email": "minhyeok.son@laight.ai"
+  },
+  "plugins": [
+    {
+      "name": "laighthouse-plugin-external",
+      "source": "./",
+      "description": "라이트하우스 분석 플러그인",
+      "version": "1.0.0",
+      "author": {
+        "name": "LaightAI"
+      },
+      "keywords": [
+        "analytics",
+        "laighthouse"
+      ],
+      "category": "analytics"
+    }
+  ]
+}
