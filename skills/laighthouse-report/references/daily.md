@@ -1,0 +1,49 @@
+# 일간 보고서 (daily)
+
+웹앱 이름: `YYYY년 M월 D일 {브랜드} 일간 보고서` · 머리글 `기준일 YYYY년 M월 D일 (요일) · 전일 YYYY-MM-DD 대비`
+레이아웃: 카드형 본문 + 우측 "AI 제안" 패널.
+
+## 섹션 구성 (웹앱과 동일 순서)
+
+| # | 섹션(slot_key) | 내용 | 데이터(plan key) · 산식 |
+|---|---|---|---|
+| 1 | 목표 달성 현황 (`target_progression`) | 월 예산/매출/ROAS 목표 카드 + 기간 진척률·소진율·달성률·누적 ROAS | `target` (월, as_of=D0). target·actual 그대로, ROAS는 배수(8.39). 진척률 = D0일/월 일수 |
+| 2 | M월 D일의 성과요약 (`daily_executive_summary`) | **텍스트(작성)** | 아래 가이드 |
+| 3 | 최근 7일 일별 광고 성과 (`daily_ad_performance_group`) | 매출·광고비 막대 + ROAS 선, 하단 7일 캘린더 | `trend7` (D-6~D0 일별). ROAS = round(매출/광고비×100) |
+| 4 | 주요 캠페인의 M월 D일 성과 진단(최근 7일 대비) (`daily_campaign_diagnosis_group`) | 매출/CTR/CVR 진단 트리맵 3개 | `treemap` (D-7~D0 일별, 캠페인×광고그룹). 크기 = D0 광고비/노출/클릭, 색 = D0 값 ÷ D-7~D-1 일평균(CTR·CVR은 일별 비율의 7일 단순평균). 상위 캠페인 10개(그 외 `기타`), 캠페인별 상위 광고그룹 10개(그 외 `기타`) |
+| 5 | 전체 광고 성과 세부 데이터 (`daily_ad_detail_group`) | ① M월 D일 광고 채널 성과 ② 캠페인/광고그룹/키워드 계층 표 | ① `media_day`(월초~D0) + `target_media.*`: 일 광고비, 적정 광고비 = (매체 월 예산 − 월초~D-1 소진) ÷ (남은 일수, D0 포함), 일 광고 매출, 일 ROAS, 월 누적 ROAS. ② `detail`(D-30~D0 합계): 검색 매체(BRS/PLINK/NVSHOP)의 키워드(ad_name ≠ "-") 행, 광고비 내림차순 → 웹앱처럼 채널▸캠페인▸광고그룹 계층으로 표시 |
+
+캠페인 성과·광고그룹 성과 표도 데이터에 포함되지만, 웹앱과 마찬가지로 화면에는 키워드 계층 표 하나로 합쳐 보인다.
+
+## 텍스트: `daily_executive_summary` (제목 "M월 D일의 성과요약")
+
+마크다운 불릿 3개(`- `), 각 불릿은 완결된 문장(~습니다체). 비교 기준은 **"직전 7일(M/D~M/D) 일평균"**
+(= facts `prev7_daily_avg`, D-7~D-1)로 통일한다.
+
+1. **전체 성과** — `d0`의 광고비·매출·ROAS, `prev7_daily_avg` 대비 증감(`d0_vs_prev7_avg`: 광고비·매출 %,
+   ROAS %p). D0가 주말/공휴일이면(`d0.weekday`, `d0.holiday`) 함께 쓴다. `prev_month_daily_avg`
+   (전월 일평균)·`this_month_until_d-1_daily_avg`로 월간 흐름 한 문장.
+2. **주요 캠페인 특이 사항** — "주요 캠페인에서 확인된 특이 사항은 아래와 같습니다." + 하위 불릿 2~3개
+   (`  - `). `diagnosis_campaigns`에서 D0와 직전 7일 일평균의 ROAS·CTR·CVR·CPC 차이가 큰 캠페인.
+3. **주요 광고그룹 특이 사항** — 같은 형식, `diagnosis_ad_groups`에서 2~3개.
+
+원인은 데이터로 확인되는 범위에서 "가능성이 있습니다/시사합니다"로 쓰고 단정하지 않는다.
+
+## AI 제안 (action_cards) — 보통 2개
+
+| title | tags | 내용 |
+|---|---|---|
+| `광고그룹 수준의 일광고비 조정 제안` | `["예산"]` | 고효율(ROAS 상승·목표 상회) 광고그룹 증액, 저효율 그룹 감액으로 재원 마련. 금액은 현재 일 광고비(약 OOO,000원) → 제안 금액 |
+| `광고그룹 수준 점검 제안: 최근 성과 데이터에 근거한 설정 점검 제안(소재/랜딩페이지 등)` | `["소재"]` | CTR↑·CVR↓(랜딩), CPC↑·ROAS↓(입찰), CTR 저조(소재) 그룹 점검 |
+
+- `description`: 첫 번째 action과 같은 문장(패널 카드 미리보기로 쓰인다).
+- `actions`: 2~4개, "캠페인 — 광고그룹 …합니다." 형태의 실행 문장.
+- `background`: `• `로 시작하는 문단 2~3개를 `\n`(또는 `\n\n`)로 연결. 근거 수치와 기대 효과(현재 전환율 유지 시
+  일 매출 약 A원 → B원)를 쓴다. 기대 효과는 단순 비례 계산임을 문장으로 드러낸다.
+- 예산 제안은 `target.cost`(소진율·균등 배분 대비)와 `channels`(매체별 적정 광고비·소진율)를 함께 고려한다.
+- 근거: `diagnosis_ad_groups`(D0 vs 직전 7일), `top_campaigns_d30_to_d0`(최근 31일 누적).
+
+## 추가 조회(선택)
+
+특정 광고그룹의 9월 대비 추세 등 facts에 없는 근거가 필요하면 같은 MCP로 좁게 조회한다. 예:
+`get_ad_performance(start=전월 1일, end=D0, time_grain="day", group_by=["campaign_name","ad_group_name"], filters={"ad_group_name": ["…"]})`.

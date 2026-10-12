@@ -1,12 +1,16 @@
 {
   "name": "laighthouse-plugin-external",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "라이트하우스 분석 플러그인",
   "author": {
     "name": "LaightAI"
   },
   "keywords": [
     "analytics",
-    "laighthouse"
+    "laighthouse",
+    "report",
+    "daily",
+    "mtd",
+    "monthly"
   ]
 }
