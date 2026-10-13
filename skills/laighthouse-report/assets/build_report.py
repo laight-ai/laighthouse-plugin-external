@@ -744,7 +744,6 @@ def build_mtd(plan, work):
     items.append(target_progression(plan, work, nd, E.day, (mtd_cost, mtd_rev)))
 
     items.append(artifact("text", {"slot_key": "mtd_executive_summary", "type": "text", "name": "Executive Summary", "items": []}, 2))
-    items.append(artifact("text", {"slot_key": "mtd_performance_overview", "type": "text", "name": "성과에 대한 개괄", "items": []}, 3))
 
     mo = envelope(work, "months")
     if mo:

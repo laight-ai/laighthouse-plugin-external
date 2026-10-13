@@ -10,7 +10,7 @@
       "name": "laighthouse-plugin-external",
       "source": "./",
       "description": "라이트하우스 분석 플러그인",
-      "version": "1.1.4",
+      "version": "1.1.5",
       "author": {
         "name": "LaightAI"
       },

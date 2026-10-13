@@ -9,17 +9,16 @@
 |---|---|---|---|
 | 1 | 목표 달성 현황 | 목표 카드 + 진척률/소진율/달성률/누적 ROAS | `target` |
 | 2 | Executive Summary (`mtd_executive_summary`) | **텍스트** | |
-| 3 | 성과에 대한 개괄 (`mtd_performance_overview`) | **텍스트** | |
-| 4 | 월별 광고 성과 (`ad_performance_recent_months`) | 최근 6개월 광고비·매출 막대 + ROAS 선 (당월은 MTD) | `months` (월 단위). 광고비 반올림, ROAS 서버값 소수 4자리 |
-| 5 | 카테고리별 누적 판매액 (`items_table`) | 카테고리, 판매액, MoM(%) | `cat_month` (`day_offset`=경과일). MoM = 전월 **같은 일수** 대비, 판매액 내림차순 |
-| 6 | 일일 카테고리별 매출 현황 (`daily_sales_by_category_chart`) | 상위 5개 카테고리 일별 매출 선 | `cat_day` |
-| 7 | 제품 판매 성과의 심층 분석 (`mtd_ad_performance_analysis`) | **텍스트** | |
-| 8 | 매체 별 예산 소진 현황 (`source_progression`) | 매체별 소진율 막대(진척률 표시선), 월 예산/예상 소진/실 소진/잔여 | `target_media.*` 월 예산, 예상 = round(예산×경과일/월일수), 실 소진 = floor(월초~기준일 광고비) |
-| 9 | 캠페인 별 성과 (`campaign_table`) | 매체▸캠페인 계층 표 | `detail` 검색 매체(BRS/PLINK/NVSHOP), (캠페인, 매체) 합계. ROAS 내림차순 → 광고비 → 매출 → 이름 |
-| 10 | 광고 그룹별 심층 분석 (`mtd_ad_group_analysis`) | **텍스트** | |
-| 11 | 그룹 별 성과 (`groups_table`) | 광고그룹명 기준 합계 | 같은 정렬 |
-| 12 | 키워드 별 성과 (`keywords_table`) | 키워드(ad_name, "-" 제외) 기준 합계 | 같은 정렬 |
-| 13 | 일별 광고기여 매출 분석 (`daily_contribution`) | 일자별 광고비·클릭·구매·매출 | `daily_media` (광고비는 매체별 일값 반올림 후 합산) |
+| 3 | 월별 광고 성과 (`ad_performance_recent_months`) | 최근 6개월 광고비·매출 막대 + ROAS 선 (당월은 MTD) | `months` (월 단위). 광고비 반올림, ROAS 서버값 소수 4자리 |
+| 4 | 카테고리별 누적 판매액 (`items_table`) | 카테고리, 판매액, MoM(%) | `cat_month` (`day_offset`=경과일). MoM = 전월 **같은 일수** 대비, 판매액 내림차순 |
+| 5 | 일일 카테고리별 매출 현황 (`daily_sales_by_category_chart`) | 상위 5개 카테고리 일별 매출 선 | `cat_day` |
+| 6 | 제품 판매 성과의 심층 분석 (`mtd_ad_performance_analysis`) | **텍스트** | |
+| 7 | 매체 별 예산 소진 현황 (`source_progression`) | 매체별 소진율 막대(진척률 표시선), 월 예산/예상 소진/실 소진/잔여 | `target_media.*` 월 예산, 예상 = round(예산×경과일/월일수), 실 소진 = floor(월초~기준일 광고비) |
+| 8 | 캠페인 별 성과 (`campaign_table`) | 매체▸캠페인 계층 표 | `detail` 검색 매체(BRS/PLINK/NVSHOP), (캠페인, 매체) 합계. ROAS 내림차순 → 광고비 → 매출 → 이름 |
+| 9 | 광고 그룹별 심층 분석 (`mtd_ad_group_analysis`) | **텍스트** | |
+| 10 | 그룹 별 성과 (`groups_table`) | 광고그룹명 기준 합계 | 같은 정렬 |
+| 11 | 키워드 별 성과 (`keywords_table`) | 키워드(ad_name, "-" 제외) 기준 합계 | 같은 정렬 |
+| 12 | 일별 광고기여 매출 분석 (`daily_contribution`) | 일자별 광고비·클릭·구매·매출 | `daily_media` (광고비는 매체별 일값 반올림 후 합산) |
 
 ## 텍스트
 
@@ -36,21 +35,11 @@ facts: `target`(목표·균등 배분·월말 예상·`projection_vs_target_krw`
 ### `mtd_executive_summary` (Executive Summary) — 불릿 4개, 각 불릿 최대 2문장
 1. 첫 문장은 수치 없이 판정만 쓴다. 기간 ROAS vs 월 목표 ROAS(`target.roas.diff_pp`)에 따라
    "이번 달 ROAS는 목표 이상이었습니다." / "이번 달 ROAS는 목표에 근접한 수준입니다." /
-   "이번 달 ROAS는 목표에 미치지 못했습니다." 중 하나. 이어서 기간 ROAS vs 목표(%p), 매출·예산의 균등 배분 대비
-   초과/미달 금액, 현재 추이로 갔을 때 월말 예상 광고비·매출과 예산·목표 상회/미달 여부.
+   "이번 달 ROAS는 목표에 미치지 못했습니다." 중 하나. 이어서 기간 ROAS vs 목표(%p), 현재 추이로 갔을 때
+   월말 예상 광고비·매출과 예산·목표 상회/미달 여부.
 2. 이번 달 ROAS vs 직전월·직전 3개월 평균·전년 동기, 최근 13개월 중 위치와 추세.
 3. 전체 성과에 가장 큰 영향을 미친 매체-캠페인 분석(`top_campaigns_by_impact`).
 4. 매출 상위 카테고리(비중 %)와 성장/역성장 카테고리 분석.
-
-### `mtd_performance_overview` (성과에 대한 개괄) — 소제목 3개 고정
-```
-### 1. 매출 발생 현황:
-### 2. 예산 소진 현황:
-### 3. ROAS 현황:
-```
-각 소제목 아래는 불릿이 아닌 한 문단. 1·2는 같은 구조(`target.revenue`/`target.cost`): 실제 값과 월 목표 대비 달성(소진)률 → 균등 배분 기준
-(`even_pace_krw`) 대비 차이(`vs_even_pace_krw`) → 현재 추이 유지 시 월말 예상치(`month_end_projection_krw`)와
-목표 대비 차이(`projection_vs_target_krw`). 3은 실제 ROAS vs 목표 ROAS와 그 의미, "최종 ROAS는 변동될 수 있음" 단서.
 
 ### `mtd_ad_performance_analysis` (제품 판매 성과의 심층 분석)
 모든 불릿은 간결하게, **문장 2개 이하**.
