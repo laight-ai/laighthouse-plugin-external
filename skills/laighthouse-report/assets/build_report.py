@@ -451,7 +451,8 @@ def cmd_plan(a):
             gap(b, "media_month", P, ME, "month", ["media"], [K["cost"], K["revenue"]] + ([K["roas"]] if "roas" in K else []), purpose="매체 별 성과 비교"),
         ]
         calls += [
-            gap(b, "ctx_groups", P, ME, "month", ["product_category", "media", "campaign_name", "ad_group_name"], base, purpose="(텍스트용) 광고그룹·카테고리 전월 대비"),
+            gap(b, "ctx_groups", P, ME, "month", ["product_category", "media", "campaign_name", "ad_group_name"], base, purpose="(텍스트용) 캠페인·광고그룹·카테고리 전월 대비"),
+            {"key": "ctx_promotions", "tool": "list_promotions", "params": {"brand_name": b, "start_date": iso(M), "end_date": iso(ME)}, "purpose": "(텍스트용) 월 중 프로모션"},
         ]
     else:
         sys.exit("--type must be daily, mtd or monthly")
