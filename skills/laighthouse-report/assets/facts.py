@@ -57,10 +57,12 @@ def target_block(work, elapsed, days):
         "days_elapsed": elapsed, "days_in_month": days, "period_progress_pct": round(frac * 100, 1),
         "cost": {"target_krw": round(ct), "actual_krw": round(ca), "burn_pct": pct(ca, ct),
                  "even_pace_krw": round(ct * frac), "vs_even_pace_krw": round(ca - ct * frac),
-                 "month_end_projection_krw": round(ca / elapsed * days) if elapsed else None},
+                 "month_end_projection_krw": round(ca / elapsed * days) if elapsed else None,
+                 "projection_vs_target_krw": round(ca / elapsed * days - ct) if elapsed else None},
         "revenue": {"target_krw": round(rt), "actual_krw": round(ra), "achievement_pct": pct(ra, rt),
                     "even_pace_krw": round(rt * frac), "vs_even_pace_krw": round(ra - rt * frac),
-                    "month_end_projection_krw": round(ra / elapsed * days) if elapsed else None},
+                    "month_end_projection_krw": round(ra / elapsed * days) if elapsed else None,
+                    "projection_vs_target_krw": round(ra / elapsed * days - rt) if elapsed else None},
         "roas": {"target_pct": round(ot * 100, 1), "actual_pct": round(oa * 100, 1), "diff_pp": round((oa - ot) * 100, 1)},
     }
 
@@ -223,7 +225,8 @@ def mtd(plan, work, items):
             cats.append({"category": c, "this_period_krw": round(v[ym(0)]), "share_pct": pct(v[ym(0)], cur_all),
                          "prev_month_same_period_krw": round(v[ym(-1)]), "mom_chg_pct": chg(v[ym(0)], v[ym(-1)]),
                          "avg_prev_3m_same_period_krw": round(a3), "vs_3m_chg_pct": chg(v[ym(0)], a3),
-                         "last_year_same_period_krw": round(v[ym(-12)]), "yoy_chg_pct": chg(v[ym(0)], v[ym(-12)])})
+                         "last_year_same_period_krw": round(v[ym(-12)]), "yoy_chg_pct": chg(v[ym(0)], v[ym(-12)]),
+                         "month_end_projection_krw": round(v[ym(0)] / E.day * nd)})
         f["categories_same_period"] = cats
     cd = envelope(work, "cat_day")
     if cd:
@@ -231,6 +234,13 @@ def mtd(plan, work, items):
         for r in cd["rows"]:
             by[r["date"]][r.get("product_category")] += nz(r.get(R))
         f["daily_revenue_by_category"] = [dict(day_info(x), total_krw=round(sum(by[x].values())), **{str(k): round(v) for k, v in by[x].items()}) for x in days_between(S, E)]
+        days = days_between(S, E)
+        peaks = []
+        for c in {k for x in days for k in by[x]}:
+            hi = max(days, key=lambda x: by[x][c])
+            lo = min(days, key=lambda x: by[x][c])
+            peaks.append({"category": c, "max_day": dict(day_info(hi), revenue_krw=round(by[hi][c])), "min_day": dict(day_info(lo), revenue_krw=round(by[lo][c]))})
+        f["category_daily_peaks"] = sorted(peaks, key=lambda x: -sum(by[y][x["category"]] for y in days))
 
     dm = envelope(work, "daily_media")
     if dm:
@@ -264,10 +274,17 @@ def mtd(plan, work, items):
         if gp:
             for r in gp["rows"]:
                 prev[(r.get("media"), r.get("campaign_name"), r.get("ad_group_name"))] = r
+        trend = collections.defaultdict(dict)
+        g3 = envelope(work, "ctx_groups_3m")
+        if g3:
+            for r in g3["rows"]:
+                trend[(r.get("media"), r.get("campaign_name"), r.get("ad_group_name"))][r["month"]] = pct(nz(r.get(R)), nz(r.get(C)))
         out = []
         for k, v in sorted(acc.items(), key=lambda kv: -kv[1][R])[:20]:
             cur = kpis(v[C], v[R], v[I], v[CL], v[CV] if CV else None)
             g = {"media": media_label(k[0]), "campaign": k[1], "ad_group": k[2], "category": cat_of.get(k), "this_period": cur}
+            if g3:
+                g["roas_pct_same_period_by_month"] = {ym: trend[k].get(ym) for ym in (add_months(S, n).strftime("%Y-%m") for n in range(-3, 1))}
             p = prev.get(k)
             if p:
                 pk = kpis(nz(p.get(C)), nz(p.get(R)), nz(p.get(I)), nz(p.get(CL)), nz(p.get(CV)) if CV else None)
@@ -278,6 +295,43 @@ def mtd(plan, work, items):
                                 "cpc_chg_pct": chg(cur["cpc_krw"] or 0, pk["cpc_krw"] or 0) if pk.get("cpc_krw") else None}
             out.append(g)
         f["top_ad_groups_by_revenue"] = out
+
+        if gp:
+            pacc = collections.defaultdict(collections.Counter)
+            for r in gp["rows"]:
+                pacc[(r.get("media"), r.get("campaign_name"), r.get("ad_group_name"))].update({m: nz(r.get(m)) for m in (C, R, I, CL, CV) if m})
+
+            def compare(a, b):
+                ka = kpis(a[C], a[R], a[I], a[CL], a[CV] if CV else None)
+                kb = kpis(b[C], b[R], b[I], b[CL], b[CV] if CV else None)
+                return {"this_period": ka, "prev_month_same_period": kb,
+                        "changes": {"cost_delta_krw": ka["cost_krw"] - kb["cost_krw"], "revenue_delta_krw": ka["revenue_krw"] - kb["revenue_krw"],
+                                    "cost_chg_pct": chg(ka["cost_krw"], kb["cost_krw"]), "revenue_chg_pct": chg(ka["revenue_krw"], kb["revenue_krw"]),
+                                    "clicks_chg_pct": chg(ka["clicks"], kb["clicks"]), "roas_diff_pp": round((ka["roas_pct"] or 0) - (kb["roas_pct"] or 0), 1),
+                                    "cvr_diff_pp": round((ka.get("cvr_pct") or 0) - (kb.get("cvr_pct") or 0), 2) if CV else None,
+                                    "cpc_chg_pct": chg(ka["cpc_krw"] or 0, kb["cpc_krw"]) if kb.get("cpc_krw") else None}}
+
+            def rollup(keyf, src):
+                o = collections.defaultdict(collections.Counter)
+                for k, v in src.items():
+                    kk = keyf(k)
+                    if kk is not None:
+                        o[kk].update(v)
+                return o
+
+            # campaigns ranked by how much they moved total revenue vs the same days of last month
+            ca, cb = rollup(lambda k: k[:2], acc), rollup(lambda k: k[:2], pacc)
+            rows = [{"media": media_label(k[0]), "campaign": k[1], **compare(ca[k], cb[k])} for k in set(ca) | set(cb)]
+            f["top_campaigns_by_impact_note"] = "전월 동기간 대비 매출 변화 절대값(revenue_delta_krw) 내림차순"
+            f["top_campaigns_by_impact"] = sorted(rows, key=lambda x: -abs(x["changes"]["revenue_delta_krw"]))[:5]
+            if cat_of:
+                # ad groups rolled up to their main category (ctx_cat_groups)
+                xa, xb = rollup(cat_of.get, acc), rollup(cat_of.get, pacc)
+                f["category_ad_response_note"] = "광고그룹을 주 카테고리(매출+광고비 최대)에 귀속해 합산, 전월 동기간 대비"
+                f["category_ad_response"] = [{"category": c, **compare(xa[c], xb[c])} for c in sorted(xa, key=lambda c: -xa[c][R])]
+    if load_response(work, "promotions") is not None:
+        f["promotions"] = [{"title": p.get("title", ""), "start_date": p.get("start_date") or p.get("date_begin"), "end_date": p.get("end_date") or p.get("date_end"),
+                            "info": p.get("info") or ""} for p in parse_promotions(load_response(work, "promotions"))]
     return f
 
 
