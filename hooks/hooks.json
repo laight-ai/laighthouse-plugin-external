@@ -2,7 +2,7 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": ".*laighthouse.*__(get_ad_performance|get_target_progress_v2|list_promotions)$",
+        "matcher": "^mcp__.+__(get_ad_performance|get_target_progress_v2|list_promotions)$",
         "hooks": [
           {
             "type": "command",

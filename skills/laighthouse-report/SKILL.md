@@ -39,7 +39,13 @@ app.laight.ai의 보고서 조회 화면(`/m/report/{id}`)과 **같은 HTML**을
 - `author`: 머리글 "생성 … · 작성자"에 쓰일 사용자 이름/아이디(모르면 이메일 @ 앞부분).
 - `advertiser`: 월 마감 표지에서 브랜드 아래 줄(조직/광고주명). 모르면 생략.
 
-### 2. 디스커버리 호출 (1회)
+### 2. 응답 저장 켜기 → 디스커버리 호출 (1회)
+
+첫 MCP 호출 **전에** 응답 저장을 켠다. 플러그인 훅은 이 표시가 있는 세션(3시간)에서만 응답을 저장한다.
+
+```bash
+python3 "$ASSETS/build_report.py" arm
+```
 
 `get_ad_performance(brand_name, start_date=S, end_date=E, time_grain="total", group_by=["media"])` — **`metrics` 생략**.
 S·E는 daily/mtd면 `date`(하루), monthly면 그 달의 1일·말일.
@@ -67,8 +73,9 @@ python3 "$ASSETS/build_report.py" plan --type <type> --brand "<brand>" --date <d
 python3 "$ASSETS/build_report.py" collect --work "$WORK"
 ```
 
-플러그인의 PostToolUse 훅(`hooks/save_mcp_response.py`)이 응답을 원문 그대로 저장해 두고, `collect`가 도구·인자가
-같은 응답을 찾아 `$WORK/responses/<key>.json`으로 복사한다. 출력의 `missing`에 남은 key만 아래 방법으로 저장한다.
+플러그인의 PostToolUse 훅(`hooks/save_mcp_response.py`)이 `arm` 이후의 응답을 원문 그대로 저장해 두고, `collect`가
+**현재 세션에서 저장된 응답 중** 도구·인자가 같은 것을 찾아 `$WORK/responses/<key>.json`으로 복사한다. 훅은 MCP 서버
+이름과 무관하게(플러그인 서버·claude.ai 커넥터 모두) 동작한다. 출력의 `missing`에 남은 key만 아래 방법으로 저장한다.
 
 - 호스트가 큰 응답을 파일로 저장했다는 안내(`Output has been saved to <path>`)가 있었다면 `cp <path> "$WORK/responses/<key>.json"`.
 - 그 외에는 받은 응답 텍스트를 그대로 따옴표 heredoc으로 쓴다(`cat > "$WORK/responses/<key>.json" <<'EOF'` … `EOF`).
@@ -117,6 +124,7 @@ python3 "$ASSETS/build_report.py" render --work "$WORK" --texts "$WORK/texts.jso
 
 - `<경로>`: 사용자가 지정한 경로. 없으면 `~/Downloads/laighthouse-reports/<brand>_<type>_<date>.html`
   (원격/샌드박스 환경이면 결과물 폴더의 같은 파일명).
+- `render`는 이 보고서가 사용한 저장 응답 파일을 지운다(남은 파일은 24시간 후 자동 정리).
 - 결과는 단독으로 열리는 HTML 한 파일이다(CSS·JS·차트 라이브러리 인라인, 폰트만 CDN). 파일을 사용자에게 전달한다.
 - 완료 메시지는 짧게: 보고서 이름, 파일 위치, 가장 눈에 띄는 수치 한 가지.
 
@@ -124,7 +132,7 @@ python3 "$ASSETS/build_report.py" render --work "$WORK" --texts "$WORK/texts.jso
 
 | 파일 | 역할 |
 |---|---|
-| `assets/build_report.py` | plan / collect / data / render. 웹앱 보고서 산식(정렬·반올림·표기 포함) |
+| `assets/build_report.py` | arm / plan / collect / data / render. 웹앱 보고서 산식(정렬·반올림·표기 포함) |
 | `assets/facts.py` | 텍스트 작성용 요약 수치(facts.json) |
 | `assets/render_report.py` | 보고서 데이터 → 단일 HTML |
 | `assets/report.js` | 웹앱 섹션 컴포넌트의 바닐라 JS 포팅(목표 카드, 차트 5종, 캘린더, 트리맵, 페이지/계층 표, 소진 표, AI 제안 패널·모달) |
@@ -132,4 +140,4 @@ python3 "$ASSETS/build_report.py" render --work "$WORK" --texts "$WORK/texts.jso
 | `assets/vendor/` | Chart.js 4.5.1, chartjs-plugin-datalabels 2.2.0, marked 15.0.12, ECharts 5.6.0(트리맵 전용 빌드) |
 | `references/daily.md`·`mtd.md`·`monthly.md` | 섹션 구성·산식·텍스트/AI 제안 가이드 |
 | `references/artifact-schema.md` | 보고서 데이터(JSON) 형식 |
-| `../../hooks/save_mcp_response.py` | laighthouse MCP 응답 자동 저장 훅(플러그인 공용) |
+| `../../hooks/save_mcp_response.py` | laighthouse MCP 응답 저장 훅(플러그인 공용, `arm`한 세션에서만 저장) |

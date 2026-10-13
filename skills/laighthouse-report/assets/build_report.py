@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Laighthouse report builder — reproduces the daily / MTD / monthly reports of app.laight.ai.
 
-Three sub-commands, run in order (see SKILL.md):
+Sub-commands, run in order (see SKILL.md):
+
+  arm     Turn on response capture for this session (before the first MCP call). The plugin
+          hook (hooks/save_mcp_response.py) only saves responses while capture is armed.
+            python3 build_report.py arm
 
   plan    Decide the dates and print the exact MCP calls to make.
             python3 build_report.py plan --type daily --brand 라형식품 --date 2026-10-11 \
@@ -17,7 +21,8 @@ Three sub-commands, run in order (see SKILL.md):
           Reads <work_dir>/responses/<key>.json (one file per planned call), writes
           <work_dir>/data.json and prints a compact "facts" digest to write the texts from.
 
-  render  Merge the texts + action cards and write the final HTML.
+  render  Merge the texts + action cards and write the final HTML, then delete the captured
+          responses this report used.
             python3 build_report.py render --work <work_dir> --texts <texts.json> --out <file.html>
 
 Response files may contain the raw JSON envelope returned by the tool, the tool's text
@@ -196,19 +201,44 @@ def load_response(work, key):
 
 
 CAPTURE_ROOT = os.path.join(__import__("tempfile").gettempdir(), "laighthouse_mcp_responses")
+CAPTURES_USED = ".captures_used.json"  # in <work_dir>: capture files to delete after render
 
 
 def _canon(params):
     return json.dumps({k: v for k, v in (params or {}).items() if v is not None}, ensure_ascii=False, sort_keys=True)
 
 
+def session_id():
+    """Claude Code session id (same value the hook receives), or "" when unknown."""
+    return "".join(c for c in os.environ.get("CLAUDE_CODE_SESSION_ID", "") if c.isalnum() or c in "-_")
+
+
+def arm_path():
+    return os.path.join(CAPTURE_ROOT, session_id() or "_any", ".armed")
+
+
+def armed_since(default):
+    """When capture was armed (minus a minute of slack), else `default`."""
+    try:
+        return os.path.getmtime(arm_path()) - 60
+    except OSError:
+        return default
+
+
+def capture_folders():
+    """This session's capture folder only; every session's when the session id is unknown."""
+    sess = session_id()
+    if sess:
+        return [os.path.join(CAPTURE_ROOT, sess)]
+    if not os.path.isdir(CAPTURE_ROOT):
+        return []
+    return [os.path.join(CAPTURE_ROOT, n) for n in os.listdir(CAPTURE_ROOT) if n != "_any"]
+
+
 def captured(since=0.0):
     """Responses saved by hooks/save_mcp_response.py, newest first."""
     out = []
-    if not os.path.isdir(CAPTURE_ROOT):
-        return out
-    for sess in os.listdir(CAPTURE_ROOT):
-        folder = os.path.join(CAPTURE_ROOT, sess)
+    for folder in capture_folders():
         if not os.path.isdir(folder):
             continue
         for name in os.listdir(folder):
@@ -312,12 +342,14 @@ def cmd_plan(a):
     work = os.path.abspath(os.path.expanduser(a.work))
     os.makedirs(os.path.join(work, "responses"), exist_ok=True)
     disc = None
+    used = []
     if a.discovery == "auto":
-        for rec in captured(time.time() - 6 * 3600):
+        for rec in captured(armed_since(time.time() - 6 * 3600)):
             ti = rec.get("tool_input") or {}
             if str(rec.get("tool_name", "")).endswith("get_ad_performance") and ti.get("brand_name") == a.brand \
                     and ti.get("group_by") == ["media"] and not ti.get("metrics") and ti.get("time_grain") == "total":
                 disc = _unwrap(json.loads(rec["response"]) if str(rec["response"]).strip()[:1] in "[{" else rec["response"])
+                used.append(rec["_path"])
                 break
         if not isinstance(disc, dict):
             sys.exit("no captured discovery response found — save it to a file and pass --discovery <file>")
@@ -395,6 +427,7 @@ def cmd_plan(a):
     }
     with open(os.path.join(work, "plan.json"), "w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=1)
+    note_used(work, used)
     print(json.dumps({"plan": os.path.join(work, "plan.json"), "responses_dir": os.path.join(work, "responses"),
                       "calls": [{"key": c["key"], "tool": c["tool"], "params": c["params"]} for c in calls]}, ensure_ascii=False, indent=1))
 
@@ -852,12 +885,53 @@ def load_plan(work):
         return json.load(f)
 
 
+def note_used(work, paths):
+    """Remember capture files this report consumed, so render can delete them."""
+    f = os.path.join(work, CAPTURES_USED)
+    try:
+        with open(f, encoding="utf-8") as fh:
+            old = json.load(fh)
+    except (OSError, ValueError):
+        old = []
+    with open(f, "w", encoding="utf-8") as fh:
+        json.dump(sorted(set(old) | set(paths)), fh, ensure_ascii=False)
+
+
+def delete_used(work):
+    f = os.path.join(work, CAPTURES_USED)
+    try:
+        with open(f, encoding="utf-8") as fh:
+            paths = json.load(fh)
+    except (OSError, ValueError):
+        return 0
+    root = os.path.realpath(CAPTURE_ROOT) + os.sep
+    n = 0
+    for p in paths:
+        if os.path.realpath(p).startswith(root):  # never delete outside the capture folder
+            try:
+                os.remove(p)
+                n += 1
+            except OSError:
+                pass
+    os.remove(f)
+    return n
+
+
+def cmd_arm(a):
+    path = arm_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(str(time.time()))
+    print(json.dumps({"armed": path, "session": session_id() or None,
+                      "note": "the hook saves laighthouse responses for 3 hours from now"}, ensure_ascii=False, indent=1))
+
+
 def cmd_collect(a):
     work = os.path.abspath(os.path.expanduser(a.work))
     plan = load_plan(work)
-    since = os.path.getmtime(os.path.join(work, "plan.json")) - 6 * 3600
+    since = armed_since(os.path.getmtime(os.path.join(work, "plan.json")) - 6 * 3600)
     records = captured(since)
-    got, missing = [], []
+    got, missing, used = [], [], []
     for c in plan["calls"]:
         dst = os.path.join(work, "responses", c["key"] + ".json")
         if os.path.exists(dst) and not a.overwrite:
@@ -870,6 +944,8 @@ def cmd_collect(a):
         with open(dst, "w", encoding="utf-8") as f:
             f.write(rec["response"])
         got.append(c["key"])
+        used.append(rec["_path"])
+    note_used(work, used)
     print(json.dumps({"collected": got, "missing": missing, "capture_dir": CAPTURE_ROOT}, ensure_ascii=False, indent=1))
 
 
@@ -924,12 +1000,16 @@ def cmd_render(a):
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         f.write(render(data))
+    deleted = delete_used(work)
     print(out)
+    if deleted:
+        print(f"deleted {deleted} captured MCP response file(s)", file=sys.stderr)
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("arm")
     pl = sub.add_parser("plan")
     pl.add_argument("--type", required=True, choices=["daily", "mtd", "monthly"])
     pl.add_argument("--brand", required=True)
@@ -952,7 +1032,7 @@ def main():
     re_.add_argument("--texts")
     re_.add_argument("--out", required=True)
     a = p.parse_args()
-    {"plan": cmd_plan, "collect": cmd_collect, "data": cmd_data, "render": cmd_render}[a.cmd](a)
+    {"arm": cmd_arm, "plan": cmd_plan, "collect": cmd_collect, "data": cmd_data, "render": cmd_render}[a.cmd](a)
 
 
 if __name__ == "__main__":
