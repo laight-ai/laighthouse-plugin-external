@@ -18,6 +18,12 @@ The matcher in hooks.json does not depend on the MCP server name (plugin server,
 claude.ai connector, ...); the `brand_name` argument check below keeps other servers'
 same-named tools out.
 
+Large responses: when a result exceeds the host's token limit, the hook does not receive
+the data but the host's notice ("Error: result (N characters) exceeds maximum allowed
+tokens. Output has been saved to <path>.") — the full response is in <path>. The hook
+then saves that file's content instead; if it cannot be read, the notice is saved with
+`spilled_path` so `build_report.py collect` can retry (and never mistakes it for data).
+
 The hook never changes what the model sees (no stdout) and never fails the tool call:
 any error is swallowed.
 """
@@ -25,6 +31,7 @@ any error is swallowed.
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -33,6 +40,30 @@ import time
 ROOT = os.path.join(tempfile.gettempdir(), "laighthouse_mcp_responses")
 ARM_TTL = 3 * 3600
 STALE_SECS = 24 * 3600
+SPILL_RE = re.compile(r"^Error: result \([\d,]+ characters\) exceeds maximum allowed tokens\. Output has been saved to (.+?)\.?$")
+SPILL_WAIT = 5.0
+
+
+def spilled_path(text):
+    """Path of the host's saved full output when `text` is the "exceeds maximum allowed tokens" notice."""
+    m = SPILL_RE.match(str(text).lstrip().split("\n", 1)[0].strip())
+    if not m:
+        return None
+    path = m.group(1).strip()
+    # only the host's own spill folder (…/tool-results/<file>)
+    return path if os.path.basename(os.path.dirname(path)) == "tool-results" else None
+
+
+def read_spilled(path, wait=SPILL_WAIT):
+    deadline = time.time() + wait
+    while True:
+        try:
+            with open(path, encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            if time.time() >= deadline:
+                return None
+            time.sleep(0.25)
 
 
 def extract_text(resp):
@@ -87,12 +118,19 @@ def main():
     text = extract_text(resp)
     if not text:
         return
-    tool = str(data.get("tool_name") or "")
+    rec = {"tool_name": str(data.get("tool_name") or ""), "tool_input": tool_input, "saved_at": time.time(), "response": text}
+    spill = spilled_path(text)
+    if spill:
+        full = read_spilled(spill)
+        if full:
+            rec["response"] = full
+        else:
+            rec["spilled_path"] = spill
     folder = os.path.join(ROOT, session)
     os.makedirs(folder, exist_ok=True)
-    name = "%d_%s.json" % (int(time.time() * 1000), tool.rsplit("__", 1)[-1])
+    name = "%d_%s.json" % (int(time.time() * 1000), rec["tool_name"].rsplit("__", 1)[-1])
     with open(os.path.join(folder, name), "w", encoding="utf-8") as f:
-        json.dump({"tool_name": tool, "tool_input": tool_input, "saved_at": time.time(), "response": text}, f, ensure_ascii=False)
+        json.dump(rec, f, ensure_ascii=False)
     prune()
 
 

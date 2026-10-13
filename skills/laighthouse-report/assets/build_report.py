@@ -181,6 +181,40 @@ def _unwrap(obj):
     return obj
 
 
+# When a result exceeds the host's token limit the tool output (and what the hook receives)
+# is only a notice pointing at the saved full output. Same pattern as hooks/save_mcp_response.py.
+SPILL_RE = re.compile(r"^Error: result \([\d,]+ characters\) exceeds maximum allowed tokens\. Output has been saved to (.+?)\.?$")
+
+
+def spilled_path(text):
+    m = SPILL_RE.match(str(text).lstrip().split("\n", 1)[0].strip())
+    if not m:
+        return None
+    path = m.group(1).strip()
+    return path if os.path.basename(os.path.dirname(path)) == "tool-results" else None
+
+
+def resolve_spill(text):
+    """The full output for a spill notice (None if unreadable); other text unchanged."""
+    path = spilled_path(text)
+    if not path:
+        return text
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def is_envelope(text):
+    """True when `text` is a get_ad_performance data envelope (JSON with `rows`)."""
+    try:
+        obj = _unwrap(json.loads(text))
+    except ValueError:
+        return False
+    return isinstance(obj, dict) and isinstance(obj.get("rows"), list)
+
+
 def load_response(work, key):
     path = os.path.join(work, "responses", key + ".json")
     if not os.path.exists(path):
@@ -189,7 +223,9 @@ def load_response(work, key):
             return None
         path = alt
     with open(path, encoding="utf-8") as f:
-        raw = f.read()
+        raw = resolve_spill(f.read())
+    if raw is None:
+        return None
     s = raw.strip()
     if not s:
         return None
@@ -348,7 +384,8 @@ def cmd_plan(a):
             ti = rec.get("tool_input") or {}
             if str(rec.get("tool_name", "")).endswith("get_ad_performance") and ti.get("brand_name") == a.brand \
                     and ti.get("group_by") == ["media"] and not ti.get("metrics") and ti.get("time_grain") == "total":
-                disc = _unwrap(json.loads(rec["response"]) if str(rec["response"]).strip()[:1] in "[{" else rec["response"])
+                resp = resolve_spill(rec["response"]) or ""
+                disc = _unwrap(json.loads(resp) if resp.strip()[:1] in "[{" else resp)
                 used.append(rec["_path"])
                 break
         if not isinstance(disc, dict):
@@ -938,11 +975,12 @@ def cmd_collect(a):
             got.append(c["key"])
             continue
         rec = find_captured(c["tool"], c["params"], records=records)
-        if rec is None:
+        resp = resolve_spill(rec["response"]) if rec else None
+        if not resp or spilled_path(resp) or (c["tool"] == "get_ad_performance" and not is_envelope(resp)):
             missing.append(c["key"])
             continue
         with open(dst, "w", encoding="utf-8") as f:
-            f.write(rec["response"])
+            f.write(resp)
         got.append(c["key"])
         used.append(rec["_path"])
     note_used(work, used)
@@ -952,7 +990,10 @@ def cmd_collect(a):
 def cmd_data(a):
     work = os.path.abspath(os.path.expanduser(a.work))
     plan = load_plan(work)
-    missing = [c["key"] for c in plan["calls"] if load_response(work, c["key"]) is None and not c["key"].startswith("ctx_")]
+    # get_ad_performance must yield a data envelope; anything else (error text, an unresolved
+    # "exceeds maximum allowed tokens" notice) is as good as missing
+    missing = [c["key"] for c in plan["calls"] if not c["key"].startswith("ctx_") and (
+        envelope(work, c["key"]) is None if c["tool"] == "get_ad_performance" else load_response(work, c["key"]) is None)]
     builder = {"daily": build_daily, "mtd": build_mtd, "monthly": build_monthly}[plan["type"]]
     name, ref, items, _ = builder(plan, work)
     from facts import make_facts
@@ -1007,6 +1048,13 @@ def cmd_render(a):
 
 
 def main():
+    # the JSON we print (brand / metric names, paths) is copied into MCP calls verbatim;
+    # a legacy console code page (cp949 on Korean Windows) would mangle it
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("arm")

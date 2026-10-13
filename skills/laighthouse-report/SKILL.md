@@ -75,9 +75,12 @@ python3 "$ASSETS/build_report.py" collect --work "$WORK"
 
 플러그인의 PostToolUse 훅(`hooks/save_mcp_response.py`)이 `arm` 이후의 응답을 원문 그대로 저장해 두고, `collect`가
 **현재 세션에서 저장된 응답 중** 도구·인자가 같은 것을 찾아 `$WORK/responses/<key>.json`으로 복사한다. 훅은 MCP 서버
-이름과 무관하게(플러그인 서버·claude.ai 커넥터 모두) 동작한다. 출력의 `missing`에 남은 key만 아래 방법으로 저장한다.
+이름과 무관하게(플러그인 서버·claude.ai 커넥터 모두) 동작한다. 호스트가 큰 응답을 파일로 돌린 경우(`exceeds maximum
+allowed tokens. Output has been saved to <path>`)에도 훅·`collect`가 그 파일의 원문을 가져온다. 출력의 `missing`에 남은
+key만 아래 방법으로 저장한다.
 
 - 호스트가 큰 응답을 파일로 저장했다는 안내(`Output has been saved to <path>`)가 있었다면 `cp <path> "$WORK/responses/<key>.json"`.
+  안내문 자체를 응답 파일로 저장하지 않는다.
 - 그 외에는 받은 응답 텍스트를 그대로 따옴표 heredoc으로 쓴다(`cat > "$WORK/responses/<key>.json" <<'EOF'` … `EOF`).
   숫자를 고치거나 행을 빼지 않는다. `target_media.BRS` 같은 key는 파일명도 `target_media.BRS.json`.
 - 도구 오류는 저장하지 않는다. 단 `list_promotions`의 `Promotion calendar is not enabled` 오류는 `[]`를 저장.
