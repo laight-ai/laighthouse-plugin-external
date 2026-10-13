@@ -12,7 +12,7 @@ import collections
 import datetime as dt
 
 from build_report import (KR_HOLIDAYS, add_days, add_months, d, days_between, envelope, iso, load_response, media_label,
-                          media_sort_key, month_end, month_start, nz, parse_target)
+                          media_sort_key, month_end, month_start, nz, parse_promotions, parse_target)
 
 WD = ["월", "화", "수", "목", "금", "토", "일"]
 
@@ -357,6 +357,36 @@ def monthly(plan, work, items):
                                     "clicks_chg_pct": chg(ka["clicks"], kb["clicks"]), "roas_diff_pp": round((ka["roas_pct"] or 0) - (kb["roas_pct"] or 0), 1),
                                     "cvr_diff_pp": round((ka.get("cvr_pct") or 0) - (kb.get("cvr_pct") or 0), 2) if CV else None}})
         f["top_ad_groups_by_revenue"] = out
+
+        def compare(a, b):
+            ka = kpis(a[C], a[R], a[I], a[CL], a[CV] if CV else None)
+            kb = kpis(b[C], b[R], b[I], b[CL], b[CV] if CV else None)
+            return {"this_month": ka, "prev_month": kb,
+                    "changes": {"cost_delta_krw": ka["cost_krw"] - kb["cost_krw"], "revenue_delta_krw": ka["revenue_krw"] - kb["revenue_krw"],
+                                "cost_chg_pct": chg(ka["cost_krw"], kb["cost_krw"]), "revenue_chg_pct": chg(ka["revenue_krw"], kb["revenue_krw"]),
+                                "clicks_chg_pct": chg(ka["clicks"], kb["clicks"]), "roas_diff_pp": round((ka["roas_pct"] or 0) - (kb["roas_pct"] or 0), 1),
+                                "cvr_diff_pp": round((ka.get("cvr_pct") or 0) - (kb.get("cvr_pct") or 0), 2) if CV else None}}
+
+        # campaigns ranked by how much they moved total revenue vs last month
+        camp = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
+        for k, v in acc.items():
+            for ym, c in v.items():
+                camp[(k[0], k[1])][ym].update(c)
+        rows = [{"media": media_label(k[0]), "campaign": k[1], **compare(v[cur], v[prv])} for k, v in camp.items()]
+        f["top_campaigns_by_impact_note"] = "전월 대비 매출 변화 절대값(revenue_delta_krw) 내림차순"
+        f["top_campaigns_by_impact"] = sorted(rows, key=lambda x: -abs(x["changes"]["revenue_delta_krw"]))[:5]
+
+        # ad-group performance rolled up to each group's main category
+        cad = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
+        for k, v in acc.items():
+            if k in cat:
+                for ym, c in v.items():
+                    cad[cat[k].most_common(1)[0][0]][ym].update(c)
+        f["category_ad_response_note"] = "광고그룹을 주 카테고리(매출+광고비 최대)에 귀속해 합산"
+        f["category_ad_response"] = [{"category": c, **compare(v[cur], v[prv])} for c, v in sorted(cad.items(), key=lambda kv: -kv[1][cur][R])]
+    if load_response(work, "ctx_promotions") is not None:
+        f["promotions"] = [{"title": p.get("title", ""), "start_date": p.get("start_date") or p.get("date_begin"), "end_date": p.get("end_date") or p.get("date_end"),
+                            "info": p.get("info") or ""} for p in parse_promotions(load_response(work, "ctx_promotions"))]
     return f
 
 
