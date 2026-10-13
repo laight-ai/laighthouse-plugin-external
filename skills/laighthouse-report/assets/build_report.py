@@ -438,6 +438,7 @@ def cmd_plan(a):
             gap(b, "ctx_months_same_period", add_months(S, -12), E, "month", None, [K["cost"], K["revenue"]] + ([K["roas"]] if "roas" in K else []), day_offset=E.day, purpose="(텍스트용) 전월·3개월·전년 동기간 비교"),
             gap(b, "ctx_groups_prev", add_months(S, -1), min(add_days(add_months(S, -1), E.day - 1), add_days(S, -1)), "total", ["media", "campaign_name", "ad_group_name"], base, purpose="(텍스트용) 전월 동기간 광고그룹 성과"),
             gap(b, "ctx_cat_groups", S, E, "total", ["product_category", "media", "campaign_name", "ad_group_name"], [K["cost"], K["revenue"]], purpose="(텍스트용) 광고그룹↔카테고리 연결"),
+            gap(b, "ctx_groups_3m", add_months(S, -3), E, "month", ["media", "campaign_name", "ad_group_name"], [K["cost"], K["revenue"]], day_offset=E.day, purpose="(텍스트용) 광고그룹 ROAS 최근 3개월 동기간 추이"),
         ]
     elif t == "monthly":
         M = month_start(d(a.date if len(a.date) > 7 else a.date + "-01"))
