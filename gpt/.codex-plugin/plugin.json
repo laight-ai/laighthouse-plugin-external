@@ -1,0 +1,16 @@
+{
+  "name": "laighthouse-plugin-external",
+  "version": "1.2.0",
+  "description": "라이트하우스 분석 플러그인 — 라이트하우스(app.laight.ai) 일간·MTD·월 마감 보고서와 같은 HTML 보고서와 네이버 광고 운영 가이드를 제공합니다.",
+  "author": {
+    "name": "LaightAI"
+  },
+  "keywords": ["analytics", "laighthouse", "report", "daily", "mtd", "monthly"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Laighthouse Report",
+    "shortDescription": "라이트하우스 MCP 데이터로 일간·MTD·월 마감 보고서(HTML)를 만듭니다.",
+    "category": "Analytics"
+  }
+}

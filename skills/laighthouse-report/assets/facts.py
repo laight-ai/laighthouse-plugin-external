@@ -68,11 +68,12 @@ def target_block(work, elapsed, days):
 
 
 def media_targets(work, codes):
+    from build_report import media_cost_target
     out = {}
     for m in codes:
-        t = parse_target(load_response(work, "target_media." + m))
-        if t and t.get("cost") and t["cost"][0]:
-            out[m] = t["cost"][0]
+        t = media_cost_target(work, m)
+        if t:
+            out[m] = t
     return out
 
 
@@ -244,13 +245,16 @@ def mtd(plan, work, items):
 
     dm = envelope(work, "daily_media")
     if dm:
-        cost = collections.Counter()
+        cost, rev = collections.Counter(), collections.Counter()
         for r in dm["rows"]:
             if r.get("media") is not None:
                 cost[r["media"]] += nz(r.get(C))
+                rev[r["media"]] += nz(r.get(R))
         tg = media_targets(work, cost.keys())
+        # roas_pct: 매체별 MTD ROAS(광고 매출 ÷ 광고비) — 예산 조정 카드가 효율 근거로 쓴다
         f["media_budget"] = [{"media": media_label(m), "monthly_budget_krw": round(tg[m]) if m in tg else None, "spent_krw": int(cost[m] + 1e-6),
-                              "burn_pct": pct(cost[m], tg[m]) if m in tg else None, "even_pace_pct": round(E.day / nd * 100, 1)} for m in sorted(cost, key=media_sort_key)]
+                              "burn_pct": pct(cost[m], tg[m]) if m in tg else None, "even_pace_pct": round(E.day / nd * 100, 1),
+                              "revenue_krw": round(rev[m]), "roas_pct": pct(rev[m], cost[m])} for m in sorted(cost, key=media_sort_key)]
 
     cat_of = {}
     cg = envelope(work, "ctx_cat_groups")

@@ -13,7 +13,8 @@ Sub-commands, run in order (see SKILL.md):
           Writes <work_dir>/plan.json and prints the call list as JSON.
 
   collect Copy the responses saved by the plugin hook (hooks/save_mcp_response.py) into
-          <work_dir>/responses/ by matching tool name + arguments to the plan.
+          <work_dir>/responses/ by matching tool name + arguments to the plan. `data` does this
+          itself first, so this step is only for checking what is still missing.
             python3 build_report.py collect --work <work_dir>
 
   data    Build every number/table/chart section from the saved MCP responses.
@@ -417,7 +418,6 @@ def cmd_plan(a):
             gap(b, "detail", add_days(D0, -30), D0, "total", ["media", "campaign_name", "ad_group_name", "ad_name"], base, purpose="캠페인/광고그룹/키워드 표 (대용량)"),
             {"key": "promotions", "tool": "list_promotions", "params": {"brand_name": b, "start_date": iso(D0), "end_date": iso(D0)}, "purpose": "프로모션"},
         ]
-        calls += [{"key": f"target_media.{m}", "tool": "get_target_progress_v2", "params": {"brand_name": b, "month": D0.strftime("%Y-%m"), "media": m, "as_of_date": iso(D0), "cost_metric": K["cost"], "revenue_metric": K["revenue"]}, "purpose": "매체별 월 예산 (적정 광고비)"} for m in media]
         calls += [  # optional context for the written summary
             gap(b, "ctx_daily", add_months(ms, -1), D0, "day", None, base, purpose="(텍스트용) 전월 1일~D0 일별 합계: 직전 7일·전월 일평균 비교"),
         ]
@@ -433,7 +433,6 @@ def cmd_plan(a):
             gap(b, "detail", S, E, "total", ["media", "campaign_name", "ad_group_name", "ad_name"], base, purpose="캠페인/그룹/키워드 표 (대용량)"),
             {"key": "promotions", "tool": "list_promotions", "params": {"brand_name": b, "start_date": iso(S), "end_date": iso(E)}, "purpose": "프로모션"},
         ]
-        calls += [{"key": f"target_media.{m}", "tool": "get_target_progress_v2", "params": {"brand_name": b, "month": E.strftime("%Y-%m"), "media": m, "as_of_date": iso(E), "cost_metric": K["cost"], "revenue_metric": K["revenue"]}, "purpose": "매체별 월 예산 소진 현황"} for m in media]
         calls += [  # optional context for the written analyses
             gap(b, "ctx_months_same_period", add_months(S, -12), E, "month", None, [K["cost"], K["revenue"]] + ([K["roas"]] if "roas" in K else []), day_offset=E.day, purpose="(텍스트용) 전월·3개월·전년 동기간 비교"),
             gap(b, "ctx_groups_prev", add_months(S, -1), min(add_days(add_months(S, -1), E.day - 1), add_days(S, -1)), "total", ["media", "campaign_name", "ad_group_name"], base, purpose="(텍스트용) 전월 동기간 광고그룹 성과"),
@@ -495,11 +494,44 @@ def target_progression(plan, work, period_total, period_current, fallback):
         ]}, 1)
 
 
+def parse_target_media(text):
+    """Second table of an all-media get_target_progress_v2 response -> {media: cost target}.
+    Only media rows (campaign_name "-"); 0 / "-" targets are left out (= no target)."""
+    if text is None:
+        return {}
+    if isinstance(text, dict):
+        text = text.get("result") or json.dumps(text)
+    out, header = {}, None
+    for line in str(text).splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if not line.strip().startswith("|") or all(set(c) <= set("-: ") for c in cells):
+            continue
+        if cells[:2] == ["media", "campaign_name"]:
+            header = cells
+            continue
+        if header and len(cells) == len(header):
+            row = dict(zip(header, cells))
+            if row.get("campaign_name") in ("-", "") and row.get("metric") == "cost":
+                try:
+                    v = float(row.get("target", "").replace(",", ""))
+                except ValueError:
+                    continue
+                if v > 0:
+                    out[row["media"]] = v
+    return out
+
+
 def media_cost_target(work, code):
+    """A media's monthly budget: the second table of the all-media `target` response (one call covers
+    every media). A legacy per-media `target_media.<code>` response, if one was saved, still wins."""
     t = parse_target(load_response(work, "target_media." + code))
-    if not t or "cost" not in t or not t["cost"][0]:
-        return None
-    return t["cost"][0]
+    if t and t.get("cost") and t["cost"][0]:
+        return t["cost"][0]
+    table = parse_target_media(load_response(work, "target"))
+    if code in table:
+        return table[code]
+    low = {str(k).lower(): v for k, v in table.items()}
+    return low.get(str(code).lower())
 
 
 def months_chart(env, K, months, slot="ad_performance_recent_months"):
@@ -966,13 +998,19 @@ def cmd_arm(a):
 
 def cmd_collect(a):
     work = os.path.abspath(os.path.expanduser(a.work))
+    got, missing = collect(work, a.overwrite)
+    print(json.dumps({"collected": got, "missing": missing, "capture_dir": CAPTURE_ROOT}, ensure_ascii=False, indent=1))
+
+
+def collect(work, overwrite=False):
+    """Copy the hook-saved responses that match the plan into <work>/responses/. -> (got, missing)."""
     plan = load_plan(work)
     since = armed_since(os.path.getmtime(os.path.join(work, "plan.json")) - 6 * 3600)
     records = captured(since)
     got, missing, used = [], [], []
     for c in plan["calls"]:
         dst = os.path.join(work, "responses", c["key"] + ".json")
-        if os.path.exists(dst) and not a.overwrite:
+        if os.path.exists(dst) and not overwrite:
             got.append(c["key"])
             continue
         rec = find_captured(c["tool"], c["params"], records=records)
@@ -985,12 +1023,13 @@ def cmd_collect(a):
         got.append(c["key"])
         used.append(rec["_path"])
     note_used(work, used)
-    print(json.dumps({"collected": got, "missing": missing, "capture_dir": CAPTURE_ROOT}, ensure_ascii=False, indent=1))
+    return got, missing
 
 
 def cmd_data(a):
     work = os.path.abspath(os.path.expanduser(a.work))
     plan = load_plan(work)
+    collect(work)   # data collects on its own — a separate `collect` step is no longer needed
     # get_ad_performance must yield a data envelope; anything else (error text, an unresolved
     # "exceeds maximum allowed tokens" notice) is as good as missing
     missing = [c["key"] for c in plan["calls"] if not c["key"].startswith("ctx_") and (

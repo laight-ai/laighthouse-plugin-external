@@ -1,0 +1,7 @@
+interface:
+  display_name: "네이버 광고 운영 가이드"
+  short_description: "네이버 광고 성과 평가와 예산·입찰·계약 조정 권고 기준을 제공합니다."
+  brand_color: "#03C75A"
+
+policy:
+  allow_implicit_invocation: true
