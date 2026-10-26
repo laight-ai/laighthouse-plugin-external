@@ -28,7 +28,7 @@
 월말 예상치는 모두 선형 증가 가정(기간 실적 ÷ 경과일 × 월일수)이며 facts의 `month_end_projection_krw`를 쓴다.
 facts: `target`(목표·균등 배분·월말 예상·`projection_vs_target_krw`), `roas_comparison`, `same_period_by_month`,
 `categories_same_period`(카테고리별 MoM·3개월·YoY·월말 예상), `daily_revenue_by_category`(요일 포함),
-`category_daily_peaks`(카테고리별 일 매출 고점/저점·요일), `media_budget`,
+`category_daily_peaks`(카테고리별 일 매출 고점/저점·요일), `media_budget`(매체별 예산·소진·MTD ROAS `roas_pct`),
 `top_campaigns_by_impact`(전월 동기간 대비 매출 변화가 큰 매체-캠페인), `category_ad_response`(카테고리별 광고그룹 합산
 광고비·매출·ROAS·CVR·CPC·클릭, 전월 동기간 대비), `top_ad_groups_by_revenue`(카테고리, 이번 기간 vs 전월 동기간 `changes`,
 `roas_pct_same_period_by_month` 최근 3개월 동기간 ROAS), `promotions`(기간 중 프로모션).

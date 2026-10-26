@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": ".*(get_ad_performance|get_target_progress_v2|list_promotions)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/save_mcp_response.py\"",
+            "timeout": 30,
+            "statusMessage": "보고서용 응답 원본 저장 중"
+          }
+        ]
+      }
+    ]
+  }
+}

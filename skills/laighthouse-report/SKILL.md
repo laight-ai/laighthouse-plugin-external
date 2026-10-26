@@ -65,38 +65,36 @@ python3 "$ASSETS/build_report.py" plan --type <type> --brand "<brand>" --date <d
 출력의 `calls`가 필요한 MCP 호출 전체다(날짜·지표 키·매체 목록 계산 완료). `ctx_`로 시작하는 key는 텍스트
 작성용 보조 데이터(권장)다.
 
-### 4. MCP 호출 → 응답 수집
+### 4. MCP 호출 → 데이터 생성
 
-`calls`를 **params 그대로**(값·키를 바꾸지 말 것) 한 메시지에서 병렬 호출한 뒤:
-
-```bash
-python3 "$ASSETS/build_report.py" collect --work "$WORK"
-```
-
-플러그인의 PostToolUse 훅(`hooks/save_mcp_response.py`)이 `arm` 이후의 응답을 원문 그대로 저장해 두고, `collect`가
-**현재 세션에서 저장된 응답 중** 도구·인자가 같은 것을 찾아 `$WORK/responses/<key>.json`으로 복사한다. 훅은 MCP 서버
-이름과 무관하게(플러그인 서버·claude.ai 커넥터 모두) 동작한다. 호스트가 큰 응답을 파일로 돌린 경우(`exceeds maximum
-allowed tokens. Output has been saved to <path>`)에도 훅·`collect`가 그 파일의 원문을 가져온다. 출력의 `missing`에 남은
-key만 아래 방법으로 저장한다.
-
-- 호스트가 큰 응답을 파일로 저장했다는 안내(`Output has been saved to <path>`)가 있었다면 `cp <path> "$WORK/responses/<key>.json"`.
-  안내문 자체를 응답 파일로 저장하지 않는다.
-- 그 외에는 받은 응답 텍스트를 그대로 따옴표 heredoc으로 쓴다(`cat > "$WORK/responses/<key>.json" <<'EOF'` … `EOF`).
-  숫자를 고치거나 행을 빼지 않는다. `target_media.BRS` 같은 key는 파일명도 `target_media.BRS.json`.
-- 도구 오류는 저장하지 않는다. 단 `list_promotions`의 `Promotion calendar is not enabled` 오류는 `[]`를 저장.
-
-### 5. 데이터 생성
+`calls`를 **params 그대로**(값·키를 바꾸지 말 것) 한 메시지에서 병렬 호출한다. 응답은 읽지 않는다 — 플러그인 훅
+(`hooks/save_mcp_response.py`)이 `arm` 이후의 응답을 원문 그대로 저장하고, 큰 응답은 모델에게 `[laighthouse-report]
+응답 원본(…)을 저장했다` 한 줄로만 보여 준다. 응답이 다 오면 바로:
 
 ```bash
 python3 "$ASSETS/build_report.py" data --work "$WORK"
 ```
 
-`$WORK/data.json`(보고서 데이터)과 `$WORK/facts.json`(텍스트용 요약 수치)을 만든다. `missing_responses`가
-비어 있지 않으면 그 호출을 다시 시도한다(그래도 실패하면 해당 섹션 없이 진행).
+`data`가 먼저 **현재 세션에서 저장된 응답 중** 도구·인자가 같은 것을 `$WORK/responses/<key>.json`으로 모은 뒤
+(따로 `collect`를 부를 필요 없음) `$WORK/data.json`(보고서 데이터)과 `$WORK/facts.json`(텍스트용 요약 수치)을 만든다.
+훅은 MCP 서버 이름과 무관하게(플러그인 서버·claude.ai 커넥터 모두) 동작하고, 호스트가 큰 응답을 파일로 돌린 경우
+(`exceeds maximum allowed tokens. Output has been saved to <path>`)에도 그 파일의 원문을 가져온다. 매체별 월 예산은
+`target` 응답의 두 번째 표(매체별 목표)에서 읽는다 — 매체마다 목표를 따로 부르지 않는다.
 
-### 6. 텍스트·AI 제안 작성
+출력의 `missing_responses`에 남은 key만:
+- 그 호출을 다시 보내고 `data`를 다시 실행한다.
+- 그래도 저장되지 않으면(훅이 없는 환경) 받은 응답을 직접 저장한다: 호스트가 파일로 돌렸다는 안내(`Output has been
+  saved to <path>`)가 있었으면 `cp <path> "$WORK/responses/<key>.json"`(안내문 자체는 저장하지 않는다), 아니면 받은
+  응답 텍스트를 그대로 따옴표 heredoc으로 쓴다(`cat > "$WORK/responses/<key>.json" <<'EOF'` … `EOF`). 숫자를 고치거나
+  행을 빼지 않는다.
+- 도구 오류는 저장하지 않는다(그 섹션 없이 진행). 단 `list_promotions`의 `Promotion calendar is not enabled` 오류는
+  `[]`를 저장.
 
-`facts.json`을 읽고 `references/<type>.md`의 가이드대로 `$WORK/texts.json`을 쓴다.
+### 5. 텍스트·AI 제안 작성
+
+`facts.json`을 읽고 `references/<type>.md`의 가이드대로 `$WORK/texts.json`을 쓴다. facts.json이 커서 셸 출력이 잘리면
+Read 도구로 연다. texts.json은 **Write 도구로** 쓴다 — 셸 heredoc·sed로 쓰면 `\_` 같은 백슬래시가 바뀌어 JSON이 깨진다
+(JSON 문자열 안에서는 `\\_`로 적는다).
 
 ```json
 {
@@ -107,7 +105,7 @@ python3 "$ASSETS/build_report.py" data --work "$WORK"
 }
 ```
 
-- `texts`의 키 = 5단계 출력의 `text_slots_to_write`. 쓰지 않은 슬롯은 섹션이 빠진다.
+- `texts`의 키 = 4단계 `data` 출력의 `text_slots_to_write`. 쓰지 않은 슬롯은 섹션이 빠진다.
 - `action_cards`는 daily·mtd만(우측 "AI 제안" 패널). monthly는 쓰지 않는다.
 - 텍스트·`actions`·`background`는 모두 웹앱과 같은 마크다운(marked, GFM, 줄바꿈 = `<br>`)으로 렌더링된다.
   밑줄이 들어간 이름(`01_분말_포레스트`)은 `\_`로 이스케이프한다.
@@ -119,7 +117,7 @@ python3 "$ASSETS/build_report.py" data --work "$WORK"
 - 날짜는 "10월 11일", 기간은 "10월 1일~11일". 요일·공휴일은 facts의 `weekday`·`holiday`.
 - ROAS 목표는 facts `target.roas.target_pct`(이미 %로 변환됨)를 쓴다.
 
-### 7. HTML 렌더링 & 전달
+### 6. HTML 렌더링 & 전달
 
 ```bash
 python3 "$ASSETS/build_report.py" render --work "$WORK" --texts "$WORK/texts.json" --out "<경로>"
@@ -135,7 +133,7 @@ python3 "$ASSETS/build_report.py" render --work "$WORK" --texts "$WORK/texts.jso
 
 | 파일 | 역할 |
 |---|---|
-| `assets/build_report.py` | arm / plan / collect / data / render. 웹앱 보고서 산식(정렬·반올림·표기 포함) |
+| `assets/build_report.py` | arm / plan / data(응답 수집 포함) / render. 웹앱 보고서 산식(정렬·반올림·표기 포함) |
 | `assets/facts.py` | 텍스트 작성용 요약 수치(facts.json) |
 | `assets/render_report.py` | 보고서 데이터 → 단일 HTML |
 | `assets/report.js` | 웹앱 섹션 컴포넌트의 바닐라 JS 포팅(목표 카드, 차트 5종, 캘린더, 트리맵, 페이지/계층 표, 소진 표, AI 제안 패널·모달) |
