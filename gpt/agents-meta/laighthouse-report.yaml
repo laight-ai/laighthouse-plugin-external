@@ -13,7 +13,7 @@ dependencies:
       description: "브랜드 광고 성과 데이터(일/월/구간 합산, 차원별 그룹화)를 조회합니다."
     - type: "mcp"
       value: "get_target_progress_v2"
-      description: "월 목표 대비 진행률을 조회합니다(전체 합계 + 매체별 목표 표)."
+      description: "월 목표 대비 진행률을 조회합니다(JSON: 전체 합계 + 매체별 목표)."
     - type: "mcp"
       value: "list_promotions"
       description: "기간 내 프로모션 목록을 조회합니다."

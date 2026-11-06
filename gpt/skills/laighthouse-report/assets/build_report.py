@@ -26,10 +26,11 @@ Sub-commands, run in order (see SKILL.md):
           responses this report used.
             python3 build_report.py render --work <work_dir> --texts <texts.json> --out <file.html>
 
-Response files may contain the raw JSON envelope returned by the tool, the tool's text
-wrapper ({"result": "..."} or [{"type": "text", "text": "..."}]), or plain text (for
-get_target_progress_v2 / list_promotions). Values are never estimated: a missing
-response makes the dependent section disappear, exactly like the web app's
+Response files may contain the raw JSON returned by the tool (a get_ad_performance envelope,
+get_target_progress_v2's object), the tool's text wrapper ({"result": "..."} or
+[{"type": "text", "text": "..."}]), or plain text (list_promotions; get_target_progress_v2 from
+an old server, which answers markdown — `parse_target` reads both). Values are never estimated:
+a missing response makes the dependent section disappear, exactly like the web app's
 "데이터 준비 중" behaviour.
 """
 
@@ -326,10 +327,32 @@ def resolve_metrics(metrics):
     return out
 
 
+def target_object(resp):
+    """get_target_progress_v2's JSON object (a dict with `status`), or None for an old server's markdown answer."""
+    if isinstance(resp, str):
+        try:
+            resp = json.loads(resp)
+        except ValueError:
+            return None
+    return resp if isinstance(resp, dict) and "status" in resp else None
+
+
+def _target_num(v):
+    return None if v is None else float(v)
+
+
 def parse_target(text):
-    """get_target_progress_v2 markdown -> {'cost': (target, actual), ...} or None (no target)."""
+    """get_target_progress_v2 response -> {'cost': (target, actual), ...} or None (no target)."""
     if text is None:
         return None
+    obj = target_object(text)
+    if obj is not None:
+        if obj["status"] != "ok":
+            return None
+        rows = {r["metric"]: (_target_num(r.get("target")), _target_num(r.get("actual")))
+                for r in obj.get("summary") or [] if r.get("metric") in ("cost", "revenue", "roas")}
+        return rows or None
+    # old server: markdown
     if isinstance(text, dict):
         text = text.get("result") or json.dumps(text)
     rows = {}
@@ -495,10 +518,18 @@ def target_progression(plan, work, period_total, period_current, fallback):
 
 
 def parse_target_media(text):
-    """Second table of an all-media get_target_progress_v2 response -> {media: cost target}.
-    Only media rows (campaign_name "-"); 0 / "-" targets are left out (= no target)."""
+    """`scopes` (old server: the second table) of an all-media get_target_progress_v2 response
+    -> {media: cost target}. Only media rows (campaign_name null / "-"); 0 / null targets are left out
+    (= no target)."""
     if text is None:
         return {}
+    obj = target_object(text)
+    if obj is not None:
+        if obj["status"] != "ok":
+            return {}
+        return {r["media"]: float(r["target"]) for r in obj.get("scopes") or []
+                if r.get("campaign_name") is None and r.get("metric") == "cost" and (r.get("target") or 0) > 0}
+    # old server: markdown
     if isinstance(text, dict):
         text = text.get("result") or json.dumps(text)
     out, header = {}, None
@@ -522,7 +553,7 @@ def parse_target_media(text):
 
 
 def media_cost_target(work, code):
-    """A media's monthly budget: the second table of the all-media `target` response (one call covers
+    """A media's monthly budget: the media rows of the all-media `target` response (one call covers
     every media). A legacy per-media `target_media.<code>` response, if one was saved, still wins."""
     t = parse_target(load_response(work, "target_media." + code))
     if t and t.get("cost") and t["cost"][0]:

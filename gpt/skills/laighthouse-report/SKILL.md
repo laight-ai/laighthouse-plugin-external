@@ -87,8 +87,11 @@ python3 "$ASSETS/build_report.py" data --work "$WORK"
 `data`가 먼저 **현재 세션에서 저장된 응답 중** 도구·인자가 같은 것을 `$WORK/responses/<key>.json`으로 모은 뒤
 (따로 `collect`를 부를 필요 없음) `$WORK/data.json`(보고서 데이터)과 `$WORK/facts.json`(텍스트용 요약 수치)을 만든다.
 훅은 MCP 서버 이름과 무관하게(플러그인 서버·claude.ai 커넥터 모두) 동작하고, 호스트가 큰 응답을 파일로 돌린 경우
-(`exceeds maximum allowed tokens. Output has been saved to <path>`)에도 그 파일의 원문을 가져온다. 매체별 월 예산은
-`target` 응답의 두 번째 표(매체별 목표)에서 읽는다 — 매체마다 목표를 따로 부르지 않는다.
+(`exceeds maximum allowed tokens. Output has been saved to <path>`)에도 그 파일의 원문을 가져온다.
+`target`(`get_target_progress_v2`) 응답은 JSON 객체 하나다(`status`, `summary` 전체 합계, `scopes` 매체·캠페인별
+목표, `fees`). `status`가 `ok`가 아니면 목표 없음으로 본다. 옛 서버는 같은 내용을 마크다운 표로 답하고,
+`build_report.py`가 두 형식을 모두 읽는다. 매체별 월 예산은 이 응답의 매체 행에서 읽는다 — 매체마다 목표를 따로
+부르지 않는다.
 
 출력의 `missing_responses`에 남은 key만:
 - 그 호출을 다시 보내고 `data`를 다시 실행한다.
