@@ -178,7 +178,7 @@ def test_saved_response_shapes(br, tmp_path, text):
 
 def test_media_cost_target_reads_the_saved_json(br, tmp_path):
     work = save(tmp_path, json.dumps(OBJECT))
-    assert br.media_cost_target(work, "google") == 31300000.0   # media matched case-insensitively
+    assert br.media_cost_target(work, "google") == 31300000.0
     assert br.media_cost_target(work, "Kakao") is None
 
 
