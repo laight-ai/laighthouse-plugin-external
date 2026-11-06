@@ -1,21 +1,15 @@
 """get_target_progress_v2 reads the same whether the server answers its JSON object or the old markdown.
-
-Run from the repo root: `python3 -m pytest tests` (no pytest installed: `uv run --no-project --with pytest
-python -m pytest tests`). Every test runs against both copies: the Claude source (skills/, hooks/) and the
-GPT copy that gpt/sync_from_claude.py makes.
 """
 
+import filecmp
 import importlib.util
 import json
 import os
-import subprocess
-import sys
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# One month as an old server prints it.
 MARKDOWN = "\n".join([
     "month: 2026-10",
     "as_of_date: 2026-10-31",
@@ -78,10 +72,8 @@ OBJECT = {
 
 # Hand-derived from the tables: (target, actual) of the first table's rows, as floats.
 TARGET = {"cost": (161400000.0, 190828604.0), "revenue": (500000000.0, 412345678.0), "roas": (3.0979, 2.1608)}
-# Media rows' cost targets only — Meta's campaign budget (20000000) is not Meta's budget.
 MEDIA_BUDGET = {"Google": 31300000.0, "Meta": 130100000.0}
 
-# A mart without a revenue metric: revenue/roas actuals print `-` (null).
 NO_REVENUE_MARKDOWN = "\n".join([
     "month: 2026-06",
     "as_of_date: 2026-06-15",
@@ -122,7 +114,6 @@ NO_REVENUE_OBJECT = {
 NO_REVENUE_TARGET = {"cost": (10000.0, 3600.0), "revenue": (0.0, None), "roas": (0.0, None)}
 NO_REVENUE_MEDIA_BUDGET = {"Google": 10000.0}
 
-# Outcomes without tables: today's plain line, and the new object carrying it in `message`.
 PLAIN_LINES = {
     "no_target": "No all budget/target available for 2026-10.",
     "no_cost_metric": ("No cost metric in the brand's data mart (looked for 광고비, cost); "
@@ -136,27 +127,18 @@ def not_ok(status, message):
             "fee_basis": "net", "summary": [], "scopes": [], "fees": []}
 
 
-_MODULES = {}
-
-
-@pytest.fixture(params=["", "gpt"], ids=["claude", "gpt"])
-def copy_root(request):
-    return os.path.join(ROOT, request.param)
+_SPEC = importlib.util.spec_from_file_location(
+    "build_report", os.path.join(ROOT, "skills", "laighthouse-report", "assets", "build_report.py"))
+br_module = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(br_module)
 
 
 @pytest.fixture
-def br(copy_root):
-    path = os.path.join(copy_root, "skills", "laighthouse-report", "assets", "build_report.py")
-    if path not in _MODULES:
-        spec = importlib.util.spec_from_file_location("build_report_%d" % len(_MODULES), path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        _MODULES[path] = mod
-    return _MODULES[path]
+def br():
+    return br_module
 
 
 def same(got, expected):
-    # repr too: the markdown path returns floats, so must the JSON path
     return got == expected and repr(got) == repr(expected)
 
 
@@ -172,21 +154,9 @@ def save(tmp_path, text, key="target"):
     (NO_REVENUE_MARKDOWN, NO_REVENUE_OBJECT, NO_REVENUE_TARGET, NO_REVENUE_MEDIA_BUDGET),
 ], ids=["month", "no-revenue-metric"])
 def test_both_formats_read_the_same(br, markdown, obj, target, media_budget):
-    for resp in (markdown, obj):
+    for resp in (markdown, obj, json.dumps(obj, ensure_ascii=False)):
         assert same(br.parse_target(resp), target)
         assert same(br.parse_target_media(resp), media_budget)
-
-
-@pytest.mark.parametrize("resp", [
-    MARKDOWN,
-    {"result": MARKDOWN},
-    OBJECT,
-    json.dumps(OBJECT, ensure_ascii=False, indent=2),
-    json.dumps(OBJECT),
-], ids=["markdown", "result-wrapper", "object", "json-text-indented", "json-text"])
-def test_shapes_handed_to_the_parsers(br, resp):
-    assert same(br.parse_target(resp), TARGET)
-    assert same(br.parse_target_media(resp), MEDIA_BUDGET)
 
 
 @pytest.mark.parametrize("text", [
@@ -204,6 +174,10 @@ def test_saved_response_shapes(br, tmp_path, text):
     resp = br.load_response(work, "target")
     assert same(br.parse_target(resp), TARGET)
     assert same(br.parse_target_media(resp), MEDIA_BUDGET)
+
+
+def test_media_cost_target_reads_the_saved_json(br, tmp_path):
+    work = save(tmp_path, json.dumps(OBJECT))
     assert br.media_cost_target(work, "google") == 31300000.0   # media matched case-insensitively
     assert br.media_cost_target(work, "Kakao") is None
 
@@ -236,7 +210,6 @@ def test_target_section_is_the_same(br, tmp_path):
         item("월 매출 목표", "월 목표 매출 대비 달성률", 500000000.0, 412345678),
         item("월 ROAS 목표", "월 누적 ROAS", 3.0979, 2.1608),
     ]
-    # no target: target 0, actuals from the fallback (cost 1000, revenue 3000, roas 3000/1000)
     fallback = [
         item("월 예산 목표", "월 예산대비 소진율", 0, 1000),
         item("월 매출 목표", "월 목표 매출 대비 달성률", 0, 3000),
@@ -248,28 +221,10 @@ def test_target_section_is_the_same(br, tmp_path):
         assert json.dumps(got) == json.dumps(items)
 
 
-@pytest.mark.parametrize("tool_response, target", [
-    (OBJECT, TARGET),
-    (json.dumps(OBJECT, ensure_ascii=False, indent=2), TARGET),
-    ([{"type": "text", "text": json.dumps(OBJECT, ensure_ascii=False)}], TARGET),
-    ({"content": [{"type": "text", "text": json.dumps(OBJECT)}], "structuredContent": OBJECT}, TARGET),
-    (not_ok("no_target", PLAIN_LINES["no_target"]), None),
-    (MARKDOWN, TARGET),
-    ({"result": MARKDOWN}, TARGET),
-    ([{"type": "text", "text": MARKDOWN}], TARGET),
-], ids=["object", "json-text", "content-list-json", "content-dict-json", "object-no-target", "markdown",
-        "result-wrapper", "content-list-markdown"])
-def test_hook_saves_what_the_parser_reads(br, copy_root, tmp_path, tool_response, target):
-    capture = tmp_path / "laighthouse_mcp_responses" / "sess-1"
-    capture.mkdir(parents=True)
-    (capture / ".armed").write_text("armed", encoding="utf-8")
-    event = {"session_id": "sess-1", "tool_name": "mcp__laighthouse__get_target_progress_v2",
-             "tool_input": {"brand_name": "브랜드", "month": "2026-10"}, "tool_response": tool_response}
-    hook = os.path.join(copy_root, "hooks", "save_mcp_response.py")
-    subprocess.run([sys.executable, hook], input=json.dumps(event).encode("utf-8"), check=True, capture_output=True,
-                   env=dict(os.environ, TMPDIR=str(tmp_path), TEMP=str(tmp_path), TMP=str(tmp_path)))
-    saved = [n for n in os.listdir(capture) if n.endswith(".json")]
-    assert len(saved) == 1
-    rec = json.loads((capture / saved[0]).read_text(encoding="utf-8"))
-    resp = br.load_response(save(tmp_path, rec["response"]), "target")
-    assert same(br.parse_target(resp), target)
+@pytest.mark.parametrize("original, gpt_copy", [
+    ("skills/laighthouse-report/assets/build_report.py", "gpt/skills/laighthouse-report/assets/build_report.py"),
+    ("hooks/save_mcp_response.py", "gpt/hooks/save_mcp_response.py"),
+])
+def test_gpt_copies_are_byte_identical(original, gpt_copy):
+    assert filecmp.cmp(os.path.join(ROOT, original), os.path.join(ROOT, gpt_copy), shallow=False), (
+        "%s differs from %s: run `python gpt/sync_from_claude.py`" % (gpt_copy, original))

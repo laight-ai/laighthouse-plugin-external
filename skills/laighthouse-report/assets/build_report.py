@@ -352,7 +352,6 @@ def parse_target(text):
         rows = {r["metric"]: (_target_num(r.get("target")), _target_num(r.get("actual")))
                 for r in obj.get("summary") or [] if r.get("metric") in ("cost", "revenue", "roas")}
         return rows or None
-    # old server: markdown
     if isinstance(text, dict):
         text = text.get("result") or json.dumps(text)
     rows = {}
@@ -529,7 +528,6 @@ def parse_target_media(text):
             return {}
         return {r["media"]: float(r["target"]) for r in obj.get("scopes") or []
                 if r.get("campaign_name") is None and r.get("metric") == "cost" and (r.get("target") or 0) > 0}
-    # old server: markdown
     if isinstance(text, dict):
         text = text.get("result") or json.dumps(text)
     out, header = {}, None
