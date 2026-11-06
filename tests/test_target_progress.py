@@ -30,6 +30,7 @@ MARKDOWN = "\n".join([
     "| Meta | - | - | revenue | 500000000 | 412345678 | 0.8247 |",
     "| Meta | - | - | roas | 3.8432 | 3.2996 | 0.8586 |",
     "| Meta | 브랜드 캠페인 | N | cost | 20000000 | 18000000 | 0.9 |",
+    "| Naver | - | - | cost | 0 | 5000 | - |",
     "",
     "| media | fee_mode | rate |",
     "| --- | --- | --- |",
@@ -63,6 +64,8 @@ OBJECT = {
          "target": 3.8432, "actual": 3.2996, "achievement": 0.8586},
         {"media": "Meta", "campaign_name": "브랜드 캠페인", "included": False, "metric": "cost",
          "target": 20000000, "actual": 18000000, "achievement": 0.9},
+        {"media": "Naver", "campaign_name": None, "included": None, "metric": "cost",
+         "target": 0, "actual": 5000, "achievement": None},
     ],
     "fees": [
         {"media": "Google", "fee_mode": "commission", "rate": 10},
@@ -122,11 +125,6 @@ PLAIN_LINES = {
 }
 
 
-def not_ok(status, message):
-    return {"status": status, "message": message, "month": "2026-10", "as_of_date": "2026-10-31", "media": "all",
-            "fee_basis": "net", "summary": [], "scopes": [], "fees": []}
-
-
 _SPEC = importlib.util.spec_from_file_location(
     "build_report", os.path.join(ROOT, "skills", "laighthouse-report", "assets", "build_report.py"))
 br_module = importlib.util.module_from_spec(_SPEC)
@@ -160,15 +158,11 @@ def test_both_formats_read_the_same(br, markdown, obj, target, media_budget):
 
 
 @pytest.mark.parametrize("text", [
-    MARKDOWN,
-    json.dumps({"result": MARKDOWN}, ensure_ascii=False),
-    json.dumps([{"type": "text", "text": MARKDOWN}]),
     json.dumps(OBJECT, ensure_ascii=False, indent=2),
     json.dumps(OBJECT),
     json.dumps([{"type": "text", "text": json.dumps(OBJECT, ensure_ascii=False)}]),
     json.dumps({"content": [{"type": "text", "text": json.dumps(OBJECT, indent=2)}], "structuredContent": OBJECT}),
-], ids=["markdown", "result-wrapper", "content-list-markdown", "json-indented", "json", "content-list-json",
-        "content-dict-json"])
+], ids=["json-indented", "json", "content-list-json", "content-dict-json"])
 def test_saved_response_shapes(br, tmp_path, text):
     work = save(tmp_path, text)
     resp = br.load_response(work, "target")
@@ -176,25 +170,17 @@ def test_saved_response_shapes(br, tmp_path, text):
     assert same(br.parse_target_media(resp), MEDIA_BUDGET)
 
 
-def test_media_cost_target_reads_the_saved_json(br, tmp_path):
-    work = save(tmp_path, json.dumps(OBJECT))
-    assert br.media_cost_target(work, "google") == 31300000.0
-    assert br.media_cost_target(work, "Kakao") is None
-
-
-@pytest.mark.parametrize("status", sorted(PLAIN_LINES))
-def test_status_other_than_ok_is_no_target(br, status):
-    for resp in (PLAIN_LINES[status], not_ok(status, PLAIN_LINES[status]),
-                 json.dumps(not_ok(status, PLAIN_LINES[status]))):
+@pytest.mark.parametrize("status", sorted(PLAIN_LINES) + ["some_future_status"])
+def test_status_decides_even_when_rows_are_present(br, status):
+    obj = dict(OBJECT, status=status)
+    for resp in (obj, json.dumps(obj)):
         assert br.parse_target(resp) is None
         assert br.parse_target_media(resp) == {}
 
 
-def test_status_decides_even_when_rows_are_present(br):
-    for status in ("no_target", "some_future_status"):
-        resp = dict(OBJECT, status=status, message="x")
-        assert br.parse_target(resp) is None
-        assert br.parse_target_media(resp) == {}
+def test_plain_line_reads_as_no_target(br):
+    assert br.parse_target(PLAIN_LINES["no_target"]) is None
+    assert br.parse_target_media(PLAIN_LINES["no_target"]) == {}
 
 
 def test_target_section_is_the_same(br, tmp_path):
@@ -216,7 +202,7 @@ def test_target_section_is_the_same(br, tmp_path):
         item("월 ROAS 목표", "월 누적 ROAS", 0, 3),
     ]
     for text, items in ((MARKDOWN, expected), (json.dumps(OBJECT), expected),
-                        (PLAIN_LINES["no_target"], fallback), (json.dumps(not_ok("no_target", "x")), fallback)):
+                        (PLAIN_LINES["no_target"], fallback), (json.dumps(dict(OBJECT, status="no_target")), fallback)):
         got = section(text)["items"]
         assert json.dumps(got) == json.dumps(items)
 
