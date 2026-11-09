@@ -32,7 +32,7 @@ python gpt/sync_from_claude.py
    레포 밖에서 쓰려면 `codex plugin marketplace add <레포 루트 경로>`.
 2. Plugins Directory에서 소스 "Laighthouse External"을 선택해 **Laighthouse Report**를 설치합니다(MCP 인증은 설치 시).
    스킬: `daily-report`·`mtd-report`·`monthly-report`, `overall-summary`(+ `-comment`·`-total`·`-tables`·`-history`·`-mix`),
-   `naver-search`·`naver-news`·`naver-blog`·`weather-impact`, `naver-ads-guide`.
+   `naver-search`·`naver-news`·`naver-blog`·`weather-impact`, `naver-ads-guide`, `media-mix-result`.
 3. 대화에서 `/hooks`를 열어 `save_responses.py`·`capture_ad_performance.py`·`capture_change_raw.py`를 신뢰합니다. 신뢰하지 않아도 스킬은 동작하지만, 모델이 응답을
    직접 파일로 저장해야 해서 느리고 큰 응답 섹션은 빠질 수 있습니다. 실행 환경에 `python3`가 필요합니다.
 
