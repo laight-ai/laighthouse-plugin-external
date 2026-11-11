@@ -26,8 +26,7 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 REPORT = ("daily-report", "mtd-report", "monthly-report")
 EXTERNAL = ("naver-search", "naver-news", "naver-blog", "weather-impact")
-KIT_FILES = ("report_kit.py", "report_kit.js", "report_kit.css", "chart.umd.min.js", "fees.py", "fees_legacy.py",
-             "fee_views.py", "saved_responses.py")
+KIT_FILES = ("report_kit.py", "report_kit.css", "fees.py", "fees_legacy.py", "saved_responses.py")
 HOOKS = ("capture_ad_performance.py", "capture_change_raw.py", "save_responses.py")
 
 NOTE_HEAD = """> 🧩 **ChatGPT/Codex 환경**
