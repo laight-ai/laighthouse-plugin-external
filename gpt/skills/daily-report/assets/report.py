@@ -12,6 +12,9 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KIND = os.path.basename(os.path.dirname(HERE)).split("-")[0]   # daily | mtd | monthly
+if KIND not in ("daily", "mtd", "monthly"):
+    raise SystemExit(f"스킬 폴더 이름({os.path.basename(os.path.dirname(HERE))})에서 보고서 종류를 알 수 없다 — "
+                     "폴더 이름은 daily-report·mtd-report·monthly-report 중 하나여야 한다")
 
 for cand in (os.path.join(HERE, "..", "shared", "report_engine"),            # zip 번들
              os.path.join(HERE, "..", "..", "..", "shared", "report_engine")):  # 플러그인 트리

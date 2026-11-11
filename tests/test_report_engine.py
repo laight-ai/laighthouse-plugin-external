@@ -25,6 +25,25 @@ def test_repair_escapes_keeps_valid_pairs_and_fixes_lone_backslash():
     assert json.loads(br.repair_escapes(raw)) == {"t": "01\\_x 02\\_y\nz \"q\""}
 
 
+def test_repair_escapes_keeps_unicode_escape_but_fixes_backslash_u_text():
+    raw = r'{"t": "\uac00 C:\user"}'
+    assert json.loads(br.repair_escapes(raw)) == {"t": "가 C:\\user"}
+
+
+def test_body_missing_from_index_is_still_found(tmp_path):
+    """병렬 호출의 훅이 index.jsonl에 동시에 덧붙이다 줄이 깨지거나 빠져도 본문 파일은 찾는다."""
+    folder = tmp_path / "sess"
+    folder.mkdir()
+    ti = {"brand_name": "b", "start_date": "2026-08-01", "end_date": "2026-08-20", "time_grain": "day"}
+    rec = {"tool_name": "mcp__x__get_ad_performance", "tool_input": ti, "saved_at": 5.0, "response": "{}"}
+    (folder / "1_get_ad_performance.json").write_text(json.dumps(rec), encoding="utf-8")
+    (folder / "index.jsonl").write_text('{"tool_name": "mcp__x__get_ad_perf', encoding="utf-8")   # 깨진 줄
+
+    recs = captures._folder_records(str(folder))
+
+    assert [r["tool_input"] for r in recs] == [ti]
+
+
 def test_target_planned_without_metric_names_accepts_call_that_named_them():
     planned = {"brand_name": "b", "month": "2026-11", "as_of_date": "2026-11-09"}
     rec = {"tool_name": "mcp__x__" + TARGET, "tool_input": dict(planned, cost_metric="spend", revenue_metric="rev")}

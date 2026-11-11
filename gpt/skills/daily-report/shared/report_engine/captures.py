@@ -16,7 +16,7 @@ TARGET_METRIC_ARGS = ("cost_metric", "revenue_metric")
 SERVER_DEFAULT = {"cost": ["광고비", "cost"], "revenue": ["매출_AB", "revenue", "매출"]}
 
 
-def _canon(params, tool=None, ignore=()):
+def _canon(params, ignore=()):
     p = {k: v for k, v in (params or {}).items() if v is not None and k not in ignore}
     return json.dumps(p, ensure_ascii=False, sort_keys=True)
 
@@ -37,23 +37,23 @@ def capture_folders():
 
 
 def _folder_records(folder):
-    """Records of one capture folder without their response bodies when the hook left an index
-    (index.jsonl — hooks/save_responses.py), so matching never opens the big files."""
+    """Records of one capture folder. Indexed records (index.jsonl — hooks/save_responses.py) come without
+    their bodies, so matching does not open the big files."""
+    out, indexed = [], set()
     index = os.path.join(folder, "index.jsonl")
     if os.path.exists(index):
-        out = []
         with open(index, encoding="utf-8") as f:
             for line in f:
                 try:
                     rec = json.loads(line)
                 except ValueError:
-                    continue
+                    continue   # a line torn by concurrent appends — its body file is picked up below
                 rec["_path"] = os.path.join(folder, rec.get("file", ""))
+                indexed.add(rec.get("file"))
                 out.append(rec)
-        return out
-    out = []
+    # bodies the index does not list (no index, or a lost / torn line) are opened directly
     for name in os.listdir(folder):
-        if not name.endswith(".json"):
+        if not name.endswith(".json") or name in indexed:
             continue
         path = os.path.join(folder, name)
         try:
@@ -96,10 +96,10 @@ def find_captured(tool, params, since=0.0, records=None):
     # a target planned without metric names accepts a call that named them (they are then the right ones);
     # once `data` has put them in the plan, only a call with exactly those names matches
     ignore = [k for k in TARGET_METRIC_ARGS if k not in (params or {})] if tool == "get_target_progress_v2" else ()
-    want = _canon(params, tool, ignore)
+    want = _canon(params, ignore)
     for rec in records if records is not None else captured(since):
         if str(rec.get("tool_name", "")).endswith("__" + tool) or rec.get("tool_name") == tool:
-            if _canon(rec.get("tool_input"), tool, ignore) == want:
+            if _canon(rec.get("tool_input"), ignore) == want:
                 return rec
     return None
 

@@ -7,8 +7,7 @@ list_promotions / list_campaign_change_raw / get_external_context)을 원본 그
 응답 원문을 읽거나 옮겨 적을 필요가 없다.
 
 - 저장 위치: <tmp>/laighthouse_mcp_responses/<session_id>/<ms>_<도구>.json
-- 저장 형식: {tool_name, tool_input, saved_at, response} — 보고서 엔진(shared/report_engine/captures.py)과
-  각 스킬의 prepare.py가 이 형식을 읽는다.
+- 저장 형식: {tool_name, tool_input, saved_at, response}
 - 호스트가 큰 응답을 잘라 "… Output has been saved to <경로>" 안내만 넘기면 그 파일을 읽어 원본을
   저장한다. 읽지 못하면 안내문과 `spilled_path`를 남겨 prepare.py가 다시 시도하게 한다.
 - `brand_name` 인자가 없는 같은 이름의 다른 서버 도구는 무시한다.

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Laighthouse report builder — reproduces the daily / MTD / monthly reports of app.laight.ai.
 
-Used by the daily-report / mtd-report / monthly-report skills through their `assets/report.py`
-wrapper (which fixes --type). Sub-commands, run in order (see each SKILL.md):
+Sub-commands, run in order:
 
   plan    Decide the dates and print the exact MCP calls to make. Needs no MCP response — the
           calls omit `metrics` (= every served metric) and the target call omits cost_metric /
@@ -48,6 +47,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+from captures import CAPTURE_ROOT, captured, find_captured, record_response, target_metric_args  # noqa: E402
 
 KST = dt.timezone(dt.timedelta(hours=9))
 
@@ -238,9 +238,6 @@ def load_response(work, key):
         return s
     return _unwrap(obj)
 
-
-from captures import (CAPTURE_ROOT, captured, find_captured, record_response,  # noqa: E402  (응답 수집)
-                      target_metric_args)
 
 
 def envelope(work, key):
@@ -912,7 +909,8 @@ def _saved_text(rec):
 def collect(work, overwrite=False, plan=None):
     """Copy the hook-saved responses that match the plan into <work>/responses/. -> (got, missing)."""
     plan = plan or load_plan(work)
-    records = captured(os.path.getmtime(os.path.join(work, "plan.json")) - 6 * 3600)
+    # only responses saved after this run's plan (a minute of slack) — never an earlier run's
+    records = captured(os.path.getmtime(os.path.join(work, "plan.json")) - 60)
     got, missing = [], []
     for c in plan["calls"]:
         dst = os.path.join(work, "responses", c["key"] + ".json")
@@ -970,7 +968,7 @@ def cmd_data(a):
             pass
         collect(work, plan=plan)
         if load_response(work, tcall["key"]) is None:
-            missing = [c for c in missing if c is not tcall and c["key"] != tcall["key"]] + [tcall]
+            missing = [c for c in missing if c["key"] != tcall["key"]] + [tcall]
     with open(os.path.join(work, "plan.json"), "w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=1)
     builder = {"daily": build_daily, "mtd": build_mtd, "monthly": build_monthly}[plan["type"]]
@@ -992,7 +990,7 @@ def cmd_data(a):
                      ensure_ascii=False, separators=(",", ":")))
 
 
-ESCAPE = re.compile(r'\\(["\\/bfnrtu]?)')
+ESCAPE = re.compile(r'\\(["\\/bfnrt]|u[0-9a-fA-F]{4})?')
 
 
 def repair_escapes(raw):
