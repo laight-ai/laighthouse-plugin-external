@@ -2,11 +2,31 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "^mcp__.+__(get_ad_performance|get_target_progress_v2|list_promotions)$",
+        "matcher": ".*get_ad_performance$",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/save_mcp_response.py\"",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/capture_ad_performance.py\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": ".*list_campaign_change_raw$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/capture_change_raw.py\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__.+__(get_ad_performance|get_target_progress_v2|list_promotions|list_campaign_change_raw|get_external_context)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/save_responses.py\"",
             "timeout": 30
           }
         ]

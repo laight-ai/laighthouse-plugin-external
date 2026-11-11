@@ -1,0 +1,19 @@
+interface:
+  display_name: "Mix 계획표"
+  short_description: "월 예산·단가를 입력하면 예상 노출·클릭·조회가 다시 계산되는 계획표를 만듭니다."
+  brand_color: "#2F5D8A"
+
+policy:
+  allow_implicit_invocation: true
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "get_ad_performance"
+      description: "브랜드 광고 성과 데이터(일/월/구간 합산, 차원별 그룹화)를 조회합니다."
+    - type: "mcp"
+      value: "get_target_progress_v2"
+      description: "월 예산·목표 대비 진행률을 조회합니다(전체 합계 + 매체·캠페인별 목표 표)."
+    - type: "mcp"
+      value: "get_brand_list"
+      description: "접근 가능한 브랜드 목록을 조회합니다(브랜드명이 거절됐을 때만)."
