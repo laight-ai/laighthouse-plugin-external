@@ -1,0 +1,19 @@
+interface:
+  display_name: "캠페인 변경 이력"
+  short_description: "매체가 남긴 캠페인·광고그룹 변경 기록(ON/OFF·예산·소재·타겟팅)을 정리합니다."
+  brand_color: "#2F5D8A"
+
+policy:
+  allow_implicit_invocation: true
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "get_ad_performance"
+      description: "브랜드 광고 성과 데이터(일/월/구간 합산, 차원별 그룹화)를 조회합니다."
+    - type: "mcp"
+      value: "list_campaign_change_raw"
+      description: "매체가 남긴 캠페인·광고그룹 변경 기록 원본을 조회합니다."
+    - type: "mcp"
+      value: "get_brand_list"
+      description: "접근 가능한 브랜드 목록을 조회합니다(브랜드명이 거절됐을 때만)."

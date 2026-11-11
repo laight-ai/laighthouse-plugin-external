@@ -1,0 +1,16 @@
+interface:
+  display_name: "네이버 뉴스 언급량"
+  short_description: "기간 중 네이버 뉴스 언급량과 주요 기사 요약을 HTML 보고서로 만듭니다."
+  brand_color: "#03C75A"
+
+policy:
+  allow_implicit_invocation: true
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "get_external_context"
+      description: "네이버 검색량·뉴스·블로그·날씨 원본 데이터를 조회합니다."
+    - type: "mcp"
+      value: "get_brand_list"
+      description: "접근 가능한 브랜드 목록을 조회합니다(브랜드명이 거절됐을 때만)."
