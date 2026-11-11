@@ -240,7 +240,6 @@ def load_response(work, key):
     return _unwrap(obj)
 
 
-
 def envelope(work, key):
     r = load_response(work, key)
     if isinstance(r, dict) and "rows" in r:
@@ -393,7 +392,7 @@ def cmd_plan(a):
         "author": a.author or "", "advertiser": a.advertiser or "", "brand_color": a.brand_color or "rgb(63, 143, 115)",
         "brand_initials": a.brand_initials or b[:2], "published": not a.unpublished,
         "created": a.created or dt.datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
-        "started_at": time.time(),   # responses saved before this run's plan are never used
+        "started_at": time.time(),   # collect() uses it as this run's start
         "calls": calls,
     }
     with open(os.path.join(work, "plan.json"), "w", encoding="utf-8") as f:
@@ -943,7 +942,7 @@ def metric_keys(plan, work):
 def cmd_data(a):
     work = os.path.abspath(os.path.expanduser(a.work))
     plan = load_plan(work)
-    collect(work)   # data collects on its own — a separate `collect` step is not needed
+    collect(work, plan=plan)   # data collects on its own — a separate `collect` step is not needed
     # get_ad_performance must yield a data envelope; anything else (error text, an unresolved
     # "exceeds maximum allowed tokens" notice) is as good as missing
     missing = [c for c in plan["calls"] if not c["key"].startswith("ctx_") and (

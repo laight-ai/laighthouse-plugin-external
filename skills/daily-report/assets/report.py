@@ -12,9 +12,6 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KIND = os.path.basename(os.path.dirname(HERE)).split("-")[0]   # daily | mtd | monthly
-if KIND not in ("daily", "mtd", "monthly"):
-    raise SystemExit(f"스킬 폴더 이름({os.path.basename(os.path.dirname(HERE))})에서 보고서 종류를 알 수 없다 — "
-                     "폴더 이름은 daily-report·mtd-report·monthly-report 중 하나여야 한다")
 
 for cand in (os.path.join(HERE, "..", "shared", "report_engine"),            # zip 번들
              os.path.join(HERE, "..", "..", "..", "shared", "report_engine")):  # 플러그인 트리
@@ -25,7 +22,10 @@ else:
     raise SystemExit("build_report.py를 찾을 수 없다 (shared/report_engine)")
 
 args = sys.argv[1:]
-if args[:1] == ["plan"] and "--type" not in args:
+if args[:1] == ["plan"] and not any(a == "--type" or a.startswith("--type=") for a in args):
+    if KIND not in ("daily", "mtd", "monthly"):
+        raise SystemExit(f"스킬 폴더 이름({os.path.basename(os.path.dirname(HERE))})에서 보고서 종류를 알 수 없다 — "
+                         "plan에 --type daily|mtd|monthly를 붙인다")
     args += ["--type", KIND]
 sys.argv = [engine] + args
 runpy.run_path(engine, run_name="__main__")
