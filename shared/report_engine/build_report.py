@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Laighthouse report builder — reproduces the daily / MTD / monthly reports of app.laight.ai.
 
-Sub-commands, run in order (see SKILL.md):
+Used by the daily-report / mtd-report / monthly-report skills through their `assets/report.py`
+wrapper (which fixes --type). Sub-commands, run in order (see each SKILL.md):
 
-  arm     Turn on response capture for this session (before the first MCP call). The plugin
-          hook (hooks/save_mcp_response.py) only saves responses while capture is armed.
-            python3 build_report.py arm
-
-  plan    Decide the dates and print the exact MCP calls to make.
+  plan    Decide the dates and print the exact MCP calls to make. Needs no MCP response — the
+          calls omit `metrics` (= every served metric) and the target call omits cost_metric /
+          revenue_metric (server defaults); `data` asks for the target again with them only when the
+          brand's metric names differ from the server's default pick.
             python3 build_report.py plan --type daily --brand 라형식품 --date 2026-10-11 \
-                --discovery <discovery.json> --work <work_dir> [--author kjkim] [--advertiser "Laight AI"]
+                --work <work_dir> [--author kjkim] [--advertiser "Laight AI"]
           Writes <work_dir>/plan.json and prints the call list as JSON.
 
-  collect Copy the responses saved by the plugin hook (hooks/save_mcp_response.py) into
+  collect Copy the responses saved by the plugin hook (hooks/save_responses.py) into
           <work_dir>/responses/ by matching tool name + arguments to the plan. `data` does this
           itself first, so this step is only for checking what is still missing.
             python3 build_report.py collect --work <work_dir>
@@ -20,11 +20,13 @@ Sub-commands, run in order (see SKILL.md):
   data    Build every number/table/chart section from the saved MCP responses.
             python3 build_report.py data --work <work_dir>
           Reads <work_dir>/responses/<key>.json (one file per planned call), writes
-          <work_dir>/data.json and prints a compact "facts" digest to write the texts from.
+          <work_dir>/data.json + facts.json and prints the facts digest inline (no Read needed).
 
-  render  Merge the texts + action cards and write the final HTML, then delete the captured
-          responses this report used.
-            python3 build_report.py render --work <work_dir> --texts <texts.json> --out <file.html>
+  render  Merge the texts + action cards and write the final HTML.
+            python3 build_report.py render --work <work_dir> --out <file.html> <<'EOF'
+            {"texts": {...}, "action_cards": [...]}
+            EOF
+          (--texts <file> reads them from a file instead of stdin.)
 
 Response files may contain the raw JSON envelope returned by the tool, the tool's text
 wrapper ({"result": "..."} or [{"type": "text", "text": "..."}]), or plain text (for
@@ -41,8 +43,8 @@ import json
 import math
 import os
 import re
+import shutil
 import sys
-import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -238,28 +240,21 @@ def load_response(work, key):
 
 
 CAPTURE_ROOT = os.path.join(__import__("tempfile").gettempdir(), "laighthouse_mcp_responses")
-CAPTURES_USED = ".captures_used.json"  # in <work_dir>: capture files to delete after render
+# The target call is planned without these: the server then reads the first published of
+# 광고비/cost (cost) and 매출_AB/revenue/매출 (revenue). Only when the brand's metric names differ does
+# `data` ask for the call again with them (see target_metric_args).
+TARGET_METRIC_ARGS = ("cost_metric", "revenue_metric")
+SERVER_DEFAULT = {"cost": ["광고비", "cost"], "revenue": ["매출_AB", "revenue", "매출"]}
 
 
-def _canon(params):
-    return json.dumps({k: v for k, v in (params or {}).items() if v is not None}, ensure_ascii=False, sort_keys=True)
+def _canon(params, tool=None, ignore=()):
+    p = {k: v for k, v in (params or {}).items() if v is not None and k not in ignore}
+    return json.dumps(p, ensure_ascii=False, sort_keys=True)
 
 
 def session_id():
     """Claude Code session id (same value the hook receives), or "" when unknown."""
     return "".join(c for c in os.environ.get("CLAUDE_CODE_SESSION_ID", "") if c.isalnum() or c in "-_")
-
-
-def arm_path():
-    return os.path.join(CAPTURE_ROOT, session_id() or "_any", ".armed")
-
-
-def armed_since(default):
-    """When capture was armed (minus a minute of slack), else `default`."""
-    try:
-        return os.path.getmtime(arm_path()) - 60
-    except OSError:
-        return default
 
 
 def capture_folders():
@@ -269,39 +264,84 @@ def capture_folders():
         return [os.path.join(CAPTURE_ROOT, sess)]
     if not os.path.isdir(CAPTURE_ROOT):
         return []
-    return [os.path.join(CAPTURE_ROOT, n) for n in os.listdir(CAPTURE_ROOT) if n != "_any"]
+    return [os.path.join(CAPTURE_ROOT, n) for n in os.listdir(CAPTURE_ROOT)]
+
+
+def _folder_records(folder):
+    """Records of one capture folder without their response bodies when the hook left an index
+    (index.jsonl — hooks/save_responses.py), so matching never opens the big files."""
+    index = os.path.join(folder, "index.jsonl")
+    if os.path.exists(index):
+        out = []
+        with open(index, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                rec["_path"] = os.path.join(folder, rec.get("file", ""))
+                out.append(rec)
+        return out
+    out = []
+    for name in os.listdir(folder):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(folder, name)
+        try:
+            with open(path, encoding="utf-8") as f:
+                rec = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if isinstance(rec, dict):
+            rec["_path"] = path
+            out.append(rec)
+    return out
 
 
 def captured(since=0.0):
-    """Responses saved by hooks/save_mcp_response.py, newest first."""
+    """Responses saved by the plugin hook, newest first (bodies are read by `record_response`)."""
     out = []
     for folder in capture_folders():
-        if not os.path.isdir(folder):
-            continue
-        for name in os.listdir(folder):
-            if not name.endswith(".json"):
-                continue
-            path = os.path.join(folder, name)
-            try:
-                if os.path.getmtime(path) < since:
-                    continue
-                with open(path, encoding="utf-8") as f:
-                    rec = json.load(f)
-            except (OSError, ValueError):
-                continue
-            rec["_path"] = path
-            out.append(rec)
+        if os.path.isdir(folder):
+            out += [r for r in _folder_records(folder) if (r.get("saved_at") or 0) >= since]
     out.sort(key=lambda r: r.get("saved_at", 0), reverse=True)
     return out
 
 
+def record_response(rec):
+    """The saved response text of a record (reads the body file for index records)."""
+    if "response" not in rec:
+        try:
+            with open(rec["_path"], encoding="utf-8") as f:
+                full = json.load(f)
+            rec["response"] = full.get("response")
+        except (OSError, ValueError, KeyError):
+            return None
+    resp = rec.get("response")
+    if resp is not None and not isinstance(resp, str):
+        resp = json.dumps(resp, ensure_ascii=False)
+    return resp
+
+
 def find_captured(tool, params, since=0.0, records=None):
-    want = _canon(params)
+    # a target planned without metric names accepts a call that named them (they are then the right ones);
+    # once `data` has put them in the plan, only a call with exactly those names matches
+    ignore = [k for k in TARGET_METRIC_ARGS if k not in (params or {})] if tool == "get_target_progress_v2" else ()
+    want = _canon(params, tool, ignore)
     for rec in records if records is not None else captured(since):
         if str(rec.get("tool_name", "")).endswith("__" + tool) or rec.get("tool_name") == tool:
-            if _canon(rec.get("tool_input")) == want:
+            if _canon(rec.get("tool_input"), tool, ignore) == want:
                 return rec
     return None
+
+
+def target_metric_args(K, served):
+    """{cost_metric, revenue_metric} when the server's default pick would read other metrics than K, else {}."""
+    low = {m.lower(): m for m in served}
+    pick = {role: next((low[c.lower()] for c in cands if c.lower() in low), None) for role, cands in SERVER_DEFAULT.items()}
+    if pick["cost"] == K.get("cost") and pick["revenue"] == K.get("revenue"):
+        return {}
+    return {"cost_metric": K.get("cost"), "revenue_metric": K.get("revenue")}
 
 
 def envelope(work, key):
@@ -375,35 +415,34 @@ def gap(brand, key, start, end, grain, group_by=None, metrics=None, filters=None
     return {"key": key, "tool": "get_ad_performance", "params": p, "purpose": purpose}
 
 
+def future_date_error(t, date):
+    """The report's last data day must be yesterday (KST) or earlier — data only exists up to yesterday."""
+    today = dt.datetime.now(KST).date()
+    if t == "monthly":
+        m = month_start(d(date if len(date) > 7 else date + "-01"))
+        last = month_end(m)
+        if last >= today:
+            return f"{m:%Y-%m}은(는) 아직 마감되지 않았다 — 월 마감 보고서는 지난달({add_months(month_start(today), -1):%Y-%m})까지만 된다."
+        return None
+    if d(date) >= today:
+        return f"{date}은(는) 아직 데이터가 없다 — 보고서 날짜는 어제({add_days(today, -1)})까지만 된다."
+    return None
+
+
 def cmd_plan(a):
+    err = future_date_error(a.type, a.date)
+    if err:
+        print(json.dumps({"date_error": err}, ensure_ascii=False))
+        return
     work = os.path.abspath(os.path.expanduser(a.work))
+    # a plan starts a new run: never reuse responses / outputs a previous run left in this folder
+    shutil.rmtree(os.path.join(work, "responses"), ignore_errors=True)
+    for name in ("plan.json", "data.json", "facts.json", "payload.json"):
+        try:
+            os.remove(os.path.join(work, name))
+        except OSError:
+            pass
     os.makedirs(os.path.join(work, "responses"), exist_ok=True)
-    disc = None
-    used = []
-    if a.discovery == "auto":
-        for rec in captured(armed_since(time.time() - 6 * 3600)):
-            ti = rec.get("tool_input") or {}
-            if str(rec.get("tool_name", "")).endswith("get_ad_performance") and ti.get("brand_name") == a.brand \
-                    and ti.get("group_by") == ["media"] and not ti.get("metrics") and ti.get("time_grain") == "total":
-                resp = resolve_spill(rec["response"]) or ""
-                disc = _unwrap(json.loads(resp) if resp.strip()[:1] in "[{" else resp)
-                used.append(rec["_path"])
-                break
-        if not isinstance(disc, dict):
-            sys.exit("no captured discovery response found — save it to a file and pass --discovery <file>")
-    elif a.discovery:
-        with open(os.path.expanduser(a.discovery), encoding="utf-8") as f:
-            disc = _unwrap(json.loads(f.read()))
-    metrics = (disc or {}).get("metrics") or ["광고비", "노출", "클릭", "전환", "매출", "ROAS"]
-    roles = resolve_metrics(metrics)
-    missing = [r for r in ("cost", "impression", "click", "revenue") if r not in roles]
-    if missing:
-        sys.exit(f"metric roles not found in discovery metrics {metrics}: {missing} — this skill needs 광고비/노출/클릭/매출")
-    K = roles
-    base = [K["cost"], K["impression"], K["click"]] + ([K["conversion"]] if "conversion" in K else []) + [K["revenue"]]
-    media = []
-    if disc and disc.get("rows"):
-        media = sorted({r.get("media") for r in disc["rows"] if r.get("media")}, key=media_sort_key)
     b = a.brand
     t = a.type
     calls = []
@@ -411,53 +450,53 @@ def cmd_plan(a):
         D0 = d(a.date)
         ms = month_start(D0)
         calls += [
-            {"key": "target", "tool": "get_target_progress_v2", "params": {"brand_name": b, "month": D0.strftime("%Y-%m"), "as_of_date": iso(D0), "cost_metric": K["cost"], "revenue_metric": K["revenue"]}, "purpose": "목표 달성 현황"},
-            gap(b, "media_day", ms, D0, "day", ["media"], [K["cost"], K["revenue"]], purpose="광고 채널 성과(당일·월 누적·적정 광고비)"),
-            gap(b, "trend7", add_days(D0, -6), D0, "day", None, [K["cost"], K["revenue"]], purpose="최근 7일 일별 광고 성과 차트"),
-            gap(b, "treemap", add_days(D0, -7), D0, "day", ["media", "campaign_name", "ad_group_name"], base, purpose="성과 진단 트리맵 (대용량)"),
-            gap(b, "detail", add_days(D0, -30), D0, "total", ["media", "campaign_name", "ad_group_name", "ad_name"], base, purpose="캠페인/광고그룹/키워드 표 (대용량)"),
+            {"key": "target", "tool": "get_target_progress_v2", "params": {"brand_name": b, "month": D0.strftime("%Y-%m"), "as_of_date": iso(D0)}, "purpose": "목표 달성 현황"},
+            gap(b, "media_day", ms, D0, "day", ["media"], purpose="광고 채널 성과(당일·월 누적·적정 광고비)"),
+            gap(b, "trend7", add_days(D0, -6), D0, "day", None, purpose="최근 7일 일별 광고 성과 차트"),
+            gap(b, "treemap", add_days(D0, -7), D0, "day", ["media", "campaign_name", "ad_group_name"], purpose="성과 진단 트리맵 (대용량)"),
+            gap(b, "detail", add_days(D0, -30), D0, "total", ["media", "campaign_name", "ad_group_name", "ad_name"], purpose="캠페인/광고그룹/키워드 표 (대용량)"),
             {"key": "promotions", "tool": "list_promotions", "params": {"brand_name": b, "start_date": iso(D0), "end_date": iso(D0)}, "purpose": "프로모션"},
         ]
         calls += [  # optional context for the written summary
-            gap(b, "ctx_daily", add_months(ms, -1), D0, "day", None, base, purpose="(텍스트용) 전월 1일~D0 일별 합계: 직전 7일·전월 일평균 비교"),
+            gap(b, "ctx_daily", add_months(ms, -1), D0, "day", None, purpose="(텍스트용) 전월 1일~D0 일별 합계: 직전 7일·전월 일평균 비교"),
         ]
     elif t == "mtd":
         E = d(a.date)
         S = month_start(E)
         calls += [
-            {"key": "target", "tool": "get_target_progress_v2", "params": {"brand_name": b, "month": E.strftime("%Y-%m"), "as_of_date": iso(E), "cost_metric": K["cost"], "revenue_metric": K["revenue"]}, "purpose": "목표 달성 현황"},
-            gap(b, "months", add_months(S, -5), E, "month", None, [K["cost"], K["revenue"]] + ([K["roas"]] if "roas" in K else []), purpose="월별 광고 성과 (최근 6개월, 당월은 MTD)"),
-            gap(b, "cat_month", add_months(S, -12), E, "month", ["product_category"], [K["revenue"]], day_offset=E.day, purpose="카테고리별 누적 판매액·MoM (같은 기간 비교)"),
-            gap(b, "cat_day", S, E, "day", ["product_category"], [K["revenue"]], purpose="일일 카테고리별 매출"),
-            gap(b, "daily_media", S, E, "day", ["media"], [K["cost"], K["click"]] + ([K["conversion"]] if "conversion" in K else []) + [K["revenue"]], purpose="매체 예산 소진 실적 + 일별 광고기여 매출"),
-            gap(b, "detail", S, E, "total", ["media", "campaign_name", "ad_group_name", "ad_name"], base, purpose="캠페인/그룹/키워드 표 (대용량)"),
+            {"key": "target", "tool": "get_target_progress_v2", "params": {"brand_name": b, "month": E.strftime("%Y-%m"), "as_of_date": iso(E)}, "purpose": "목표 달성 현황"},
+            gap(b, "months", add_months(S, -5), E, "month", None, purpose="월별 광고 성과 (최근 6개월, 당월은 MTD)"),
+            gap(b, "cat_month", add_months(S, -12), E, "month", ["product_category"], day_offset=E.day, purpose="카테고리별 누적 판매액·MoM (같은 기간 비교)"),
+            gap(b, "cat_day", S, E, "day", ["product_category"], purpose="일일 카테고리별 매출"),
+            gap(b, "daily_media", S, E, "day", ["media"], purpose="매체 예산 소진 실적 + 일별 광고기여 매출"),
+            gap(b, "detail", S, E, "total", ["media", "campaign_name", "ad_group_name", "ad_name"], purpose="캠페인/그룹/키워드 표 (대용량)"),
             {"key": "promotions", "tool": "list_promotions", "params": {"brand_name": b, "start_date": iso(S), "end_date": iso(E)}, "purpose": "프로모션"},
         ]
         calls += [  # optional context for the written analyses
-            gap(b, "ctx_months_same_period", add_months(S, -12), E, "month", None, [K["cost"], K["revenue"]] + ([K["roas"]] if "roas" in K else []), day_offset=E.day, purpose="(텍스트용) 전월·3개월·전년 동기간 비교"),
-            gap(b, "ctx_groups_prev", add_months(S, -1), min(add_days(add_months(S, -1), E.day - 1), add_days(S, -1)), "total", ["media", "campaign_name", "ad_group_name"], base, purpose="(텍스트용) 전월 동기간 광고그룹 성과"),
-            gap(b, "ctx_cat_groups", S, E, "total", ["product_category", "media", "campaign_name", "ad_group_name"], [K["cost"], K["revenue"]], purpose="(텍스트용) 광고그룹↔카테고리 연결"),
-            gap(b, "ctx_groups_3m", add_months(S, -3), E, "month", ["media", "campaign_name", "ad_group_name"], [K["cost"], K["revenue"]], day_offset=E.day, purpose="(텍스트용) 광고그룹 ROAS 최근 3개월 동기간 추이"),
+            gap(b, "ctx_months_same_period", add_months(S, -12), E, "month", None, day_offset=E.day, purpose="(텍스트용) 전월·3개월·전년 동기간 비교"),
+            gap(b, "ctx_groups_prev", add_months(S, -1), min(add_days(add_months(S, -1), E.day - 1), add_days(S, -1)), "total", ["media", "campaign_name", "ad_group_name"], purpose="(텍스트용) 전월 동기간 광고그룹 성과"),
+            gap(b, "ctx_cat_groups", S, E, "total", ["product_category", "media", "campaign_name", "ad_group_name"], purpose="(텍스트용) 광고그룹↔카테고리 연결"),
+            gap(b, "ctx_groups_3m", add_months(S, -3), E, "month", ["media", "campaign_name", "ad_group_name"], day_offset=E.day, purpose="(텍스트용) 광고그룹 ROAS 최근 3개월 동기간 추이"),
         ]
     elif t == "monthly":
         M = month_start(d(a.date if len(a.date) > 7 else a.date + "-01"))
         ME = month_end(M)
         P = add_months(M, -1)
         calls += [
-            {"key": "target", "tool": "get_target_progress_v2", "params": {"brand_name": b, "month": M.strftime("%Y-%m"), "as_of_date": iso(ME), "cost_metric": K["cost"], "revenue_metric": K["revenue"]}, "purpose": "목표 달성 현황"},
-            gap(b, "months", add_months(M, -12), ME, "month", None, [K["cost"], K["revenue"]] + ([K["roas"]] if "roas" in K else []), purpose="월별 광고 성과 (차트는 최근 6개월, 13개월은 텍스트용)"),
-            gap(b, "cat_month", add_months(M, -12), ME, "month", ["product_category"], [K["revenue"]], purpose="카테고리별 매출액 비교 (전월 vs 당월, 전년 동월은 텍스트용)"),
-            gap(b, "cat_day", M, ME, "day", ["product_category"], [K["revenue"]], purpose="일일 카테고리별 매출"),
-            gap(b, "media_month", P, ME, "month", ["media"], [K["cost"], K["revenue"]] + ([K["roas"]] if "roas" in K else []), purpose="매체 별 성과 비교"),
+            {"key": "target", "tool": "get_target_progress_v2", "params": {"brand_name": b, "month": M.strftime("%Y-%m"), "as_of_date": iso(ME)}, "purpose": "목표 달성 현황"},
+            gap(b, "months", add_months(M, -12), ME, "month", None, purpose="월별 광고 성과 (차트는 최근 6개월, 13개월은 텍스트용)"),
+            gap(b, "cat_month", add_months(M, -12), ME, "month", ["product_category"], purpose="카테고리별 매출액 비교 (전월 vs 당월, 전년 동월은 텍스트용)"),
+            gap(b, "cat_day", M, ME, "day", ["product_category"], purpose="일일 카테고리별 매출"),
+            gap(b, "media_month", P, ME, "month", ["media"], purpose="매체 별 성과 비교"),
         ]
         calls += [
-            gap(b, "ctx_groups", P, ME, "month", ["product_category", "media", "campaign_name", "ad_group_name"], base, purpose="(텍스트용) 캠페인·광고그룹·카테고리 전월 대비"),
+            gap(b, "ctx_groups", P, ME, "month", ["product_category", "media", "campaign_name", "ad_group_name"], purpose="(텍스트용) 캠페인·광고그룹·카테고리 전월 대비"),
             {"key": "ctx_promotions", "tool": "list_promotions", "params": {"brand_name": b, "start_date": iso(M), "end_date": iso(ME)}, "purpose": "(텍스트용) 월 중 프로모션"},
         ]
     else:
         sys.exit("--type must be daily, mtd or monthly")
     plan = {
-        "type": t, "brand": b, "date": a.date, "metric_keys": K, "media": media, "work": work,
+        "type": t, "brand": b, "date": a.date, "work": work,
         "author": a.author or "", "advertiser": a.advertiser or "", "brand_color": a.brand_color or "rgb(63, 143, 115)",
         "brand_initials": a.brand_initials or b[:2], "published": not a.unpublished,
         "created": a.created or dt.datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
@@ -465,9 +504,7 @@ def cmd_plan(a):
     }
     with open(os.path.join(work, "plan.json"), "w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=1)
-    note_used(work, used)
-    print(json.dumps({"plan": os.path.join(work, "plan.json"), "responses_dir": os.path.join(work, "responses"),
-                      "calls": [{"key": c["key"], "tool": c["tool"], "params": c["params"]} for c in calls]}, ensure_ascii=False, indent=1))
+    print(json.dumps({"calls": [{"key": c["key"], "tool": c["tool"], "params": c["params"]} for c in calls]}, ensure_ascii=False))
 
 
 # ───────────────────────────── shared sections ─────────────────────────────
@@ -955,85 +992,88 @@ def load_plan(work):
         return json.load(f)
 
 
-def note_used(work, paths):
-    """Remember capture files this report consumed, so render can delete them."""
-    f = os.path.join(work, CAPTURES_USED)
-    try:
-        with open(f, encoding="utf-8") as fh:
-            old = json.load(fh)
-    except (OSError, ValueError):
-        old = []
-    with open(f, "w", encoding="utf-8") as fh:
-        json.dump(sorted(set(old) | set(paths)), fh, ensure_ascii=False)
-
-
-def delete_used(work):
-    f = os.path.join(work, CAPTURES_USED)
-    try:
-        with open(f, encoding="utf-8") as fh:
-            paths = json.load(fh)
-    except (OSError, ValueError):
-        return 0
-    root = os.path.realpath(CAPTURE_ROOT) + os.sep
-    n = 0
-    for p in paths:
-        if os.path.realpath(p).startswith(root):  # never delete outside the capture folder
-            try:
-                os.remove(p)
-                n += 1
-            except OSError:
-                pass
-    os.remove(f)
-    return n
-
-
-def cmd_arm(a):
-    path = arm_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(str(time.time()))
-    print(json.dumps({"armed": path, "session": session_id() or None,
-                      "note": "the hook saves laighthouse responses for 3 hours from now"}, ensure_ascii=False, indent=1))
-
-
 def cmd_collect(a):
     work = os.path.abspath(os.path.expanduser(a.work))
     got, missing = collect(work, a.overwrite)
     print(json.dumps({"collected": got, "missing": missing, "capture_dir": CAPTURE_ROOT}, ensure_ascii=False, indent=1))
 
 
-def collect(work, overwrite=False):
+def _saved_text(rec):
+    """A record's response text, following a host spill notice the hook could not read yet."""
+    resp = record_response(rec)
+    if rec.get("spilled_path"):
+        try:
+            with open(rec["spilled_path"], encoding="utf-8") as f:
+                resp = f.read()
+        except OSError:
+            return None
+    return resolve_spill(resp) if resp else None
+
+
+def collect(work, overwrite=False, plan=None):
     """Copy the hook-saved responses that match the plan into <work>/responses/. -> (got, missing)."""
-    plan = load_plan(work)
-    since = armed_since(os.path.getmtime(os.path.join(work, "plan.json")) - 6 * 3600)
-    records = captured(since)
-    got, missing, used = [], [], []
+    plan = plan or load_plan(work)
+    records = captured(os.path.getmtime(os.path.join(work, "plan.json")) - 6 * 3600)
+    got, missing = [], []
     for c in plan["calls"]:
         dst = os.path.join(work, "responses", c["key"] + ".json")
         if os.path.exists(dst) and not overwrite:
             got.append(c["key"])
             continue
         rec = find_captured(c["tool"], c["params"], records=records)
-        resp = resolve_spill(rec["response"]) if rec else None
+        resp = _saved_text(rec) if rec else None
         if not resp or spilled_path(resp) or (c["tool"] == "get_ad_performance" and not is_envelope(resp)):
             missing.append(c["key"])
             continue
         with open(dst, "w", encoding="utf-8") as f:
             f.write(resp)
         got.append(c["key"])
-        used.append(rec["_path"])
-    note_used(work, used)
     return got, missing
+
+
+def metric_keys(plan, work):
+    """role -> metric key, from the `metrics` list of the responses (the calls omit `metrics`, so every
+    envelope lists all served metrics). The one with the most metrics wins."""
+    best = []
+    for c in plan["calls"]:
+        if c["tool"] == "get_ad_performance":
+            env = envelope(work, c["key"])
+            if env and len(env.get("metrics") or []) > len(best):
+                best = env["metrics"]
+    return resolve_metrics(best), best
 
 
 def cmd_data(a):
     work = os.path.abspath(os.path.expanduser(a.work))
     plan = load_plan(work)
-    collect(work)   # data collects on its own — a separate `collect` step is no longer needed
+    collect(work)   # data collects on its own — a separate `collect` step is not needed
     # get_ad_performance must yield a data envelope; anything else (error text, an unresolved
     # "exceeds maximum allowed tokens" notice) is as good as missing
-    missing = [c["key"] for c in plan["calls"] if not c["key"].startswith("ctx_") and (
+    missing = [c for c in plan["calls"] if not c["key"].startswith("ctx_") and (
         envelope(work, c["key"]) is None if c["tool"] == "get_ad_performance" else load_response(work, c["key"]) is None)]
+    K, served = metric_keys(plan, work)
+    lacking = [r for r in ("cost", "impression", "click", "revenue") if r not in K]
+    if served and lacking:
+        sys.exit(f"metric roles not found in served metrics {served}: {lacking} — this report needs 광고비/노출/클릭/매출")
+    if not served:
+        print(json.dumps({"missing_responses": [{"key": c["key"], "tool": c["tool"], "params": c["params"]} for c in missing],
+                          "note": "no get_ad_performance response was saved — resend the calls"}, ensure_ascii=False))
+        return
+    plan["metric_keys"] = K
+    extra = target_metric_args(K, served)
+    tcall = next((c for c in plan["calls"] if c["tool"] == "get_target_progress_v2"), None)
+    if extra and tcall and any(tcall["params"].get(k) != v for k, v in extra.items()):
+        # the target saved without metric names read other metrics — ask for it again with them
+        tcall["params"].update(extra)
+        try:
+            os.remove(os.path.join(work, "responses", tcall["key"] + ".json"))
+        except OSError:
+            pass
+        collect(work, plan=plan)
+        if load_response(work, tcall["key"]) is None:
+            missing = [c for c in missing if c is not tcall and c["key"] != tcall["key"]] + [tcall]
+    with open(os.path.join(work, "plan.json"), "w", encoding="utf-8") as f:
+        json.dump(plan, f, ensure_ascii=False, indent=1)
     builder = {"daily": build_daily, "mtd": build_mtd, "monthly": build_monthly}[plan["type"]]
     name, ref, items, _ = builder(plan, work)
     from facts import make_facts
@@ -1047,19 +1087,35 @@ def cmd_data(a):
     with open(os.path.join(work, "facts.json"), "w", encoding="utf-8") as f:
         json.dump(facts, f, ensure_ascii=False, indent=1)
     text_slots = [it["analysis_artifact"]["data"]["slot_key"] for it in items if it["analysis_artifact"]["type"] == "text"]
-    print(json.dumps({"data": os.path.join(work, "data.json"), "facts": os.path.join(work, "facts.json"), "report_name": name,
-                      "missing_responses": missing, "text_slots_to_write": text_slots,
-                      "action_cards": plan["type"] in ("daily", "mtd")}, ensure_ascii=False, indent=1))
+    # the facts go out inline (compact) — the model writes the texts from this output, no Read needed
+    print(json.dumps({"report_name": name, "missing_responses": [{"key": c["key"], "tool": c["tool"], "params": c["params"]} for c in missing],
+                      "text_slots_to_write": text_slots, "action_cards": plan["type"] in ("daily", "mtd"), "facts": facts},
+                     ensure_ascii=False, separators=(",", ":")))
+
+
+BAD_ESCAPE = re.compile(r'\\(?!["\\/bfnrtu])')
+
+
+def read_texts(a):
+    if a.texts and a.texts != "-":
+        with open(os.path.expanduser(a.texts), encoding="utf-8-sig") as f:
+            raw = f.read().strip()
+    else:
+        raw = sys.stdin.buffer.read().decode("utf-8-sig").strip() if not sys.stdin.isatty() else ""
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except ValueError:
+        # a shell may turn the markdown escape `\\_` into `\_` (not a JSON escape) — keep it as the text `\_`
+        return json.loads(BAD_ESCAPE.sub(r"\\\\", raw))
 
 
 def cmd_render(a):
     work = os.path.abspath(os.path.expanduser(a.work))
     with open(os.path.join(work, "data.json"), encoding="utf-8") as f:
         data = json.load(f)
-    texts = {}
-    if a.texts:
-        with open(os.path.expanduser(a.texts), encoding="utf-8") as f:
-            texts = json.load(f)
+    texts = read_texts(a)
     slots = texts.get("texts", texts)
     for it in data["items"]:
         art = it["analysis_artifact"]
@@ -1081,10 +1137,7 @@ def cmd_render(a):
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         f.write(render(data))
-    deleted = delete_used(work)
-    print(out)
-    if deleted:
-        print(f"deleted {deleted} captured MCP response file(s)", file=sys.stderr)
+    print(json.dumps({"out": out, "bytes": os.path.getsize(out), "name": data["meta"]["name"]}, ensure_ascii=False))
 
 
 def main():
@@ -1097,12 +1150,10 @@ def main():
             pass
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("arm")
     pl = sub.add_parser("plan")
     pl.add_argument("--type", required=True, choices=["daily", "mtd", "monthly"])
     pl.add_argument("--brand", required=True)
     pl.add_argument("--date", required=True, help="daily: D0, mtd: end date, monthly: YYYY-MM")
-    pl.add_argument("--discovery", help="saved discovery response file, or 'auto' to take it from the hook captures")
     pl.add_argument("--work", required=True)
     pl.add_argument("--author")
     pl.add_argument("--advertiser")
@@ -1117,10 +1168,10 @@ def main():
     da.add_argument("--work", required=True)
     re_ = sub.add_parser("render")
     re_.add_argument("--work", required=True)
-    re_.add_argument("--texts")
+    re_.add_argument("--texts", help="texts JSON file; default (or '-') reads it from stdin")
     re_.add_argument("--out", required=True)
     a = p.parse_args()
-    {"arm": cmd_arm, "plan": cmd_plan, "collect": cmd_collect, "data": cmd_data, "render": cmd_render}[a.cmd](a)
+    {"plan": cmd_plan, "collect": cmd_collect, "data": cmd_data, "render": cmd_render}[a.cmd](a)
 
 
 if __name__ == "__main__":
