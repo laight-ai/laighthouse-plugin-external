@@ -73,6 +73,8 @@ def test_other_tools_match_only_identical_arguments():
     (["광고비", "매출", "매출_AB"], {"cost": "광고비", "revenue": "매출"}, {"cost_metric": "광고비", "revenue_metric": "매출"}),
     # 서버 후보에 없는 광고비 이름(spend)
     (["spend", "revenue"], {"cost": "spend", "revenue": "revenue"}, {"cost_metric": "spend", "revenue_metric": "revenue"}),
+    # 서버는 후보를 대소문자 그대로 비교한다 — Cost·Revenue는 기본 선택(광고비/cost, 매출_AB/revenue/매출)에 걸리지 않는다
+    (["Cost", "Revenue"], {"cost": "Cost", "revenue": "Revenue"}, {"cost_metric": "Cost", "revenue_metric": "Revenue"}),
 ])
 def test_target_metric_args(served, keys, expected):
     assert captures.target_metric_args(keys, served) == expected

@@ -103,9 +103,9 @@ def find_captured(tool, params, since=0.0, records=None):
 
 
 def target_metric_args(K, served):
-    """{cost_metric, revenue_metric} when the server's default pick would read other metrics than K, else {}."""
-    low = {m.lower(): m for m in served}
-    pick = {role: next((low[c.lower()] for c in cands if c.lower() in low), None) for role, cands in SERVER_DEFAULT.items()}
+    """{cost_metric, revenue_metric} when the server's default pick would read other metrics than K, else {}.
+    The server matches its candidates case-sensitively (`Cost` is not `cost`), so this does too."""
+    pick = {role: next((c for c in cands if c in served), None) for role, cands in SERVER_DEFAULT.items()}
     if pick["cost"] == K.get("cost") and pick["revenue"] == K.get("revenue"):
         return {}
     return {"cost_metric": K.get("cost"), "revenue_metric": K.get("revenue")}

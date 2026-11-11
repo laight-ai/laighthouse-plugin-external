@@ -22,10 +22,10 @@ Sub-commands, run in order:
           <work_dir>/data.json + facts.json and prints the facts digest inline (no Read needed).
 
   render  Merge the texts + action cards and write the final HTML.
-            python3 build_report.py render --work <work_dir> --out <file.html> <<'EOF'
+            python3 build_report.py render --work <work_dir> --out <file.html> --texts - <<'EOF'
             {"texts": {...}, "action_cards": [...]}
             EOF
-          (--texts <file> reads them from a file instead of stdin.)
+          (--texts <file> reads them from a file instead.)
 
 Response files may contain the raw JSON envelope returned by the tool, the tool's text
 wrapper ({"result": "..."} or [{"type": "text", "text": "..."}]), or plain text (for
@@ -1000,11 +1000,13 @@ def repair_escapes(raw):
 
 
 def read_texts(a):
-    if a.texts and a.texts != "-":
+    if not a.texts:   # no texts: the text sections are left out (never waits on stdin)
+        return {}
+    if a.texts == "-":
+        raw = sys.stdin.buffer.read().decode("utf-8-sig").strip()
+    else:
         with open(os.path.expanduser(a.texts), encoding="utf-8-sig") as f:
             raw = f.read().strip()
-    else:
-        raw = sys.stdin.buffer.read().decode("utf-8-sig").strip() if not sys.stdin.isatty() else ""
     if not raw:
         return {}
     try:
@@ -1071,7 +1073,7 @@ def main():
     da.add_argument("--work", required=True)
     re_ = sub.add_parser("render")
     re_.add_argument("--work", required=True)
-    re_.add_argument("--texts", help="texts JSON file; default (or '-') reads it from stdin")
+    re_.add_argument("--texts", help="texts JSON file, or '-' to read it from stdin")
     re_.add_argument("--out", required=True)
     a = p.parse_args()
     {"plan": cmd_plan, "collect": cmd_collect, "data": cmd_data, "render": cmd_render}[a.cmd](a)

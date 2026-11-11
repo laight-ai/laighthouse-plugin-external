@@ -69,10 +69,10 @@ python3 "$R" data --work "$WORK"
 
 ### 5. 텍스트·AI 제안 작성 → 렌더링 (1회)
 
-`facts`만 근거로 `references/guide.md`대로 쓰고, **파일을 따로 만들지 말고** 바로 render의 stdin으로 넘긴다:
+`facts`만 근거로 `references/guide.md`대로 쓰고, **파일을 따로 만들지 말고** 바로 render의 stdin으로 넘긴다(`--texts -`):
 
 ```bash
-python3 "$R" render --work "$WORK" --out "<경로>" <<'EOF'
+python3 "$R" render --work "$WORK" --out "<경로>" --texts - <<'EOF'
 {"texts": {"monthly_executive_summary": "• ...", "monthly_sales_trend_analysis": "◆ ..."}}
 EOF
 ```
