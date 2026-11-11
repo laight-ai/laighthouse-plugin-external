@@ -28,5 +28,4 @@ args = sys.argv[1:]
 if args[:1] == ["plan"] and "--type" not in args:
     args += ["--type", KIND]
 sys.argv = [engine] + args
-sys.path.insert(0, os.path.dirname(engine))
 runpy.run_path(engine, run_name="__main__")

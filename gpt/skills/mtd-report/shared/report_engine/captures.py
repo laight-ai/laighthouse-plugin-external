@@ -1,17 +1,15 @@
-"""Responses the plugin hook (hooks/save_responses.py) saved — finding the one that answers a planned call.
+"""Responses the plugin hook (hooks/save_responses.py) saved: listing them and matching one to a call.
 
 The hook writes <tmp>/laighthouse_mcp_responses/<session>/<ms>_<tool>.json ({tool_name, tool_input, saved_at,
-response}) and an index.jsonl line per record (no body). build_report.collect matches the plan's calls
-against the index and reads only the bodies it picked.
+response}) and an index.jsonl line per record (no body), so records can be listed without opening the bodies.
 """
 import json
 import os
 import tempfile
 
 CAPTURE_ROOT = os.path.join(tempfile.gettempdir(), "laighthouse_mcp_responses")
-# The target call is planned without these: the server then reads the first published of
-# 광고비/cost (cost) and 매출_AB/revenue/매출 (revenue). Only when the brand's metric names differ does
-# `data` ask for the call again with them (see target_metric_args).
+# A target call may omit these: the server then reads the first published of 광고비/cost (cost) and
+# 매출_AB/revenue/매출 (revenue) — SERVER_DEFAULT. target_metric_args tells when that pick is not the wanted one.
 TARGET_METRIC_ARGS = ("cost_metric", "revenue_metric")
 SERVER_DEFAULT = {"cost": ["광고비", "cost"], "revenue": ["매출_AB", "revenue", "매출"]}
 
@@ -83,7 +81,7 @@ def record_response(rec):
         try:
             with open(rec["_path"], encoding="utf-8") as f:
                 full = json.load(f)
-            rec["response"] = full.get("response")
+            rec["response"] = full.get("response") if isinstance(full, dict) else None
         except (OSError, ValueError, KeyError):
             return None
     resp = rec.get("response")
@@ -93,8 +91,8 @@ def record_response(rec):
 
 
 def find_captured(tool, params, since=0.0, records=None):
-    # a target planned without metric names accepts a call that named them (they are then the right ones);
-    # once `data` has put them in the plan, only a call with exactly those names matches
+    # a target call given without metric names also accepts a saved call that named them;
+    # given with metric names, only a saved call with exactly those names matches
     ignore = [k for k in TARGET_METRIC_ARGS if k not in (params or {})] if tool == "get_target_progress_v2" else ()
     want = _canon(params, ignore)
     for rec in records if records is not None else captured(since):

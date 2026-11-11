@@ -44,6 +44,7 @@ import os
 import re
 import shutil
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -298,14 +299,10 @@ def as_int_if_whole(x):
 
 
 # ───────────────────────────── plan ─────────────────────────────
-def gap(brand, key, start, end, grain, group_by=None, metrics=None, filters=None, day_offset=None, purpose=""):
+def gap(brand, key, start, end, grain, group_by=None, day_offset=None, purpose=""):
     p = {"brand_name": brand, "start_date": iso(start), "end_date": iso(end), "time_grain": grain}
     if group_by:
         p["group_by"] = group_by
-    if metrics is not None:
-        p["metrics"] = metrics
-    if filters:
-        p["filters"] = filters
     if day_offset:
         p["day_offset"] = day_offset
     return {"key": key, "tool": "get_ad_performance", "params": p, "purpose": purpose}
@@ -396,6 +393,7 @@ def cmd_plan(a):
         "author": a.author or "", "advertiser": a.advertiser or "", "brand_color": a.brand_color or "rgb(63, 143, 115)",
         "brand_initials": a.brand_initials or b[:2], "published": not a.unpublished,
         "created": a.created or dt.datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
+        "started_at": time.time(),   # responses saved before this run's plan are never used
         "calls": calls,
     }
     with open(os.path.join(work, "plan.json"), "w", encoding="utf-8") as f:
@@ -909,8 +907,10 @@ def _saved_text(rec):
 def collect(work, overwrite=False, plan=None):
     """Copy the hook-saved responses that match the plan into <work>/responses/. -> (got, missing)."""
     plan = plan or load_plan(work)
-    # only responses saved after this run's plan (a minute of slack) — never an earlier run's
-    records = captured(os.path.getmtime(os.path.join(work, "plan.json")) - 60)
+    # only responses saved after this run's plan (a minute of slack) — never an earlier run's.
+    # `data` rewrites plan.json, so the start is kept in the plan rather than read from its mtime
+    started = plan.get("started_at") or os.path.getmtime(os.path.join(work, "plan.json"))
+    records = captured(started - 60)
     got, missing = [], []
     for c in plan["calls"]:
         dst = os.path.join(work, "responses", c["key"] + ".json")

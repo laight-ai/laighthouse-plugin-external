@@ -30,16 +30,18 @@ def test_repair_escapes_keeps_unicode_escape_but_fixes_backslash_u_text():
     assert json.loads(br.repair_escapes(raw)) == {"t": "가 C:\\user"}
 
 
-def test_body_missing_from_index_is_still_found(tmp_path):
+def test_body_missing_from_index_is_still_found(tmp_path, monkeypatch):
     """병렬 호출의 훅이 index.jsonl에 동시에 덧붙이다 줄이 깨지거나 빠져도 본문 파일은 찾는다."""
     folder = tmp_path / "sess"
     folder.mkdir()
+    monkeypatch.setattr(captures, "CAPTURE_ROOT", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess")
     ti = {"brand_name": "b", "start_date": "2026-08-01", "end_date": "2026-08-20", "time_grain": "day"}
     rec = {"tool_name": "mcp__x__get_ad_performance", "tool_input": ti, "saved_at": 5.0, "response": "{}"}
     (folder / "1_get_ad_performance.json").write_text(json.dumps(rec), encoding="utf-8")
     (folder / "index.jsonl").write_text('{"tool_name": "mcp__x__get_ad_perf', encoding="utf-8")   # 깨진 줄
 
-    recs = captures._folder_records(str(folder))
+    recs = captures.captured()
 
     assert [r["tool_input"] for r in recs] == [ti]
 
@@ -81,11 +83,14 @@ def test_collect_reads_body_of_the_newest_matching_index_record(tmp_path, monkey
     folder = root / session
     folder.mkdir(parents=True)
     params = {"brand_name": "b", "start_date": "2026-11-03", "end_date": "2026-11-09", "time_grain": "day"}
+    stale = dict(params, start_date="2026-11-01")
     bodies = {"old.json": {"rows": [{"date": "2026-11-09", "광고비": 1}]},
               "new.json": {"rows": [{"date": "2026-11-09", "광고비": 2}]},
-              "other.json": {"rows": [{"date": "2026-11-09", "광고비": 3}]}}
-    now = time.time()   # collect는 plan보다 6시간 넘게 오래된 응답을 거른다
-    index = [("old.json", params, now - 30), ("other.json", dict(params, start_date="2026-11-02"), now - 10), ("new.json", params, now - 20)]
+              "other.json": {"rows": [{"date": "2026-11-09", "광고비": 3}]},
+              "prev_run.json": {"rows": [{"date": "2026-11-09", "광고비": 4}]}}
+    started = time.time() - 100   # 이번 실행의 plan 시각 — 이보다 1분 넘게 먼저 저장된 응답(이전 실행)은 쓰지 않는다
+    index = [("old.json", params, started + 30), ("other.json", dict(params, start_date="2026-11-02"), started + 50),
+             ("new.json", params, started + 40), ("prev_run.json", stale, started - 120)]
     with open(folder / "index.jsonl", "w", encoding="utf-8") as f:
         for name, ti, at in index:
             f.write(json.dumps({"tool_name": "mcp__x__get_ad_performance", "tool_input": ti, "saved_at": at, "file": name}) + "\n")
@@ -95,10 +100,11 @@ def test_collect_reads_body_of_the_newest_matching_index_record(tmp_path, monkey
     work = tmp_path / "work"
     (work / "responses").mkdir(parents=True)
     calls = [{"key": "trend7", "tool": "get_ad_performance", "params": params},
-             {"key": "missing", "tool": "get_ad_performance", "params": dict(params, end_date="2026-11-10")}]
-    (work / "plan.json").write_text(json.dumps({"calls": calls}), encoding="utf-8")
+             {"key": "missing", "tool": "get_ad_performance", "params": dict(params, end_date="2026-11-10")},
+             {"key": "stale", "tool": "get_ad_performance", "params": stale}]
+    (work / "plan.json").write_text(json.dumps({"calls": calls, "started_at": started}), encoding="utf-8")
 
     got, missing = br.collect(str(work))
 
-    assert (got, missing) == (["trend7"], ["missing"])
+    assert (got, missing) == (["trend7"], ["missing", "stale"])
     assert br.envelope(str(work), "trend7")["rows"][0]["광고비"] == 2
