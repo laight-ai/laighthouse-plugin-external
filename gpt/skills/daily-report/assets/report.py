@@ -11,7 +11,9 @@ import runpy
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-KIND = os.path.basename(os.path.dirname(HERE)).split("-")[0]   # daily | mtd | monthly
+# Cowork는 스킬 폴더를 `<플러그인>:<스킬>` 이름으로 올린다 — 콜론 뒤가 스킬 이름이다
+SKILL = os.path.basename(os.path.dirname(HERE)).rsplit(":", 1)[-1]
+KIND = SKILL.split("-")[0]   # daily | mtd | monthly
 
 for cand in (os.path.join(HERE, "..", "shared", "report_engine"),            # zip 번들
              os.path.join(HERE, "..", "..", "..", "shared", "report_engine")):  # 플러그인 트리
@@ -24,7 +26,7 @@ else:
 args = sys.argv[1:]
 if args[:1] == ["plan"] and not any(a == "--type" or a.startswith("--type=") for a in args):
     if KIND not in ("daily", "mtd", "monthly"):
-        raise SystemExit(f"스킬 폴더 이름({os.path.basename(os.path.dirname(HERE))})에서 보고서 종류를 알 수 없다 — "
+        raise SystemExit(f"스킬 폴더 이름({SKILL})에서 보고서 종류를 알 수 없다 — "
                          "plan에 --type daily|mtd|monthly를 붙인다")
     args += ["--type", KIND]
 sys.argv = [engine] + args
