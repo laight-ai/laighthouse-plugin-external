@@ -26,6 +26,7 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 REPORT = ("daily-report", "mtd-report", "monthly-report")
 EXTERNAL = ("naver-search", "naver-news", "naver-blog", "weather-impact")
+MEDIA_MIX = ("media-mix-result",)
 KIT_FILES = ("report_kit.py", "report_kit.css", "fees.py", "fees_legacy.py", "saved_responses.py")
 HOOKS = ("capture_ad_performance.py", "capture_change_raw.py", "save_responses.py")
 
@@ -59,6 +60,8 @@ def family(name):
         return "overall"
     if name in EXTERNAL:
         return "external"
+    if name in MEDIA_MIX:
+        return "media-mix"
     return None
 
 
@@ -79,6 +82,9 @@ def copy_shared(dst, fam):
                         ignore=IGNORE)
         os.makedirs(os.path.join(out, "references"), exist_ok=True)
         shutil.copyfile(os.path.join(src, "references", "mcp-tools.md"), os.path.join(out, "references", "mcp-tools.md"))
+    elif fam == "media-mix":   # 저장 훅 응답 리더만
+        os.makedirs(os.path.join(out, "assets"), exist_ok=True)
+        shutil.copyfile(os.path.join(src, "assets", "saved_responses.py"), os.path.join(out, "assets", "saved_responses.py"))
 
 
 def rewrite(path, pairs):
@@ -144,7 +150,7 @@ def copy_skill(name):
     if os.path.exists(meta):
         os.makedirs(os.path.join(dst, "agents"), exist_ok=True)
         shutil.copyfile(meta, os.path.join(dst, "agents", "openai.yaml"))
-    if fam:
+    if fam in NOTE:
         note = NOTE[fam]
         if name == "overall-summary":   # 본 스킬은 자기 문서가 기준이다
             note = note.replace("이 문서(또는 `references/overall-summary.md`)의", "이 문서의")

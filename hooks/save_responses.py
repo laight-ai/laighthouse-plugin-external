@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """PostToolUse 저장 훅: laighthouse MCP 응답(get_ad_performance / get_target_progress_v2 /
-list_promotions / list_campaign_change_raw / get_external_context)을 원본 그대로 파일로 남긴다.
+list_promotions / list_campaign_change_raw / get_external_context / get_media_mix_job)을 원본 그대로 파일로 남긴다.
 
 왜 존재하나: 보고서 스킬은 MCP 호출을 한 메시지에 모두 보낸 뒤 `assets/prepare.py`로 빌더 입력과
 요약 근거를 한 번에 만든다. prepare.py는 이 훅이 남긴 파일을 (도구 + 인자)로 골라 읽는다 — 모델이
-응답 원문을 읽거나 옮겨 적을 필요가 없다.
+응답 원문을 읽거나 옮겨 적을 필요가 없다. media-mix-result 스킬은 `assets/build_report.py`가
+get_media_mix_job 응답을 같은 방법으로 읽는다.
 
 - 저장 위치: <tmp>/laighthouse_mcp_responses/<session_id>/<ms>_<도구>.json
 - 저장 형식: {tool_name, tool_input, saved_at, response}
