@@ -8,6 +8,12 @@
 python gpt/sync_from_claude.py
 ```
 
+> **스킬 폴더는 자기완결이다(Claude판도 같다).** Claude 데스크톱 Cowork는 스킬 폴더 하나만 올리고, 웹 Chat은 스킬 zip 하나만 받는다.
+> 그래서 스킬마다 필요한 공용 파일(`shared/`)과 `overall-summary`의 스크립트·문서를 `scripts/bundle_skills.py`가 스킬 폴더 안으로 복사한다.
+> 원본은 레포 루트 `shared/`와 `skills/overall-summary/`뿐이다 — 사본(`skills/<스킬>/shared/`, `overall-summary-*`의 `assets/`·`references/`)은
+> 고치지 말고, 원본을 고친 뒤 `python3 scripts/bundle_skills.py`(또는 위 sync — 먼저 번들을 맞춘다)를 실행한다. 스킬 문서와 스크립트는
+> 스킬 폴더 밖(`../`)을 가리키지 않는다. `python3 scripts/bundle_skills.py --check`와 `tests/test_cowork_isolation.py`가 이를 검사한다.
+
 ## 배포 형태
 
 | 배포 형태 | 대상 | 훅 |
@@ -22,8 +28,6 @@ python gpt/sync_from_claude.py
 | 매니페스트 | `.claude-plugin/plugin.json` | `gpt/.codex-plugin/plugin.json` + 스킬별 `agents/openai.yaml`(원본은 `gpt/agents-meta/`) |
 | MCP | `.mcp.json` (`"type": "http"`) | `gpt/.mcp.json` (`"type": "streamable-http"`) |
 | 훅 | `hooks/hooks.json` (`${CLAUDE_PLUGIN_ROOT}`) | `gpt/hooks/hooks.json` (`${PLUGIN_ROOT}`, 접미 매칭 matcher) — 스크립트(`save_responses.py`·`capture_*.py`)는 같은 파일 |
-| 공용 스크립트 | 레포 루트 `shared/` | 스킬 폴더마다 필요한 부분만 `<스킬>/shared/`로 넣는다(웹 Chat zip이 자기완결이 되도록) |
-| `overall-summary-*` | `../overall-summary/`의 스크립트·문서를 가리킴 | 그 스크립트·문서를 자기 폴더 `assets/`·`references/`로 넣고 경로를 바꿈 |
 | SKILL.md | 원본 | 첫 제목 아래 ChatGPT/Codex 환경 안내만 추가(스킬 계열별 — 훅이 없는 웹 Chat에서의 응답 저장 방법) |
 
 ## 설치 A — 플러그인 (ChatGPT 데스크톱 Work 모드 / Codex)
