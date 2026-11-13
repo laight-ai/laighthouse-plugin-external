@@ -7,11 +7,10 @@
     python gpt/sync_from_claude.py
 
 하는 일:
+- scripts/bundle_skills.py로 Claude판 스킬 폴더의 사본(shared/ 부분, overall-summary-* 하위 스킬의 assets/·references/)을
+  먼저 원본에 맞춘다 — Claude판 스킬 폴더도 자기완결이므로(Cowork는 스킬 폴더만 올린다) GPT판은 그 폴더를 그대로 쓴다.
+  웹 Chat에도 스킬 zip 하나만 올라가므로 같은 이유로 자기완결이어야 한다.
 - skills/<스킬>/ → gpt/skills/<스킬>/ (통째로 교체, __pycache__ 제외)
-- 스킬마다 필요한 shared/ 부분을 gpt/skills/<스킬>/shared/ 로 넣는다 — 웹 Chat에는 스킬 zip 하나만 올라가므로
-  스킬 폴더가 자기완결이어야 한다. 스크립트는 `assets/../shared/…`(번들)를 먼저 찾는다.
-- overall-summary-* 하위 스킬은 `../overall-summary/`를 가리키므로, overall-summary의 assets·SKILL.md·섹션 문서를
-  자기 폴더(assets/·references/)로 넣고 경로를 바꾼다.
 - gpt/agents-meta/<스킬>.yaml → gpt/skills/<스킬>/agents/openai.yaml (ChatGPT 스킬 메타)
 - 첫 제목 아래에 ChatGPT/Codex 환경 안내(GPT_NOTE)를 넣는다(스킬 계열별)
 - hooks/*.py → gpt/hooks/ (hooks.json은 gpt/ 쪽 것을 유지 — ${PLUGIN_ROOT} 기준)
@@ -19,15 +18,14 @@
 import os
 import re
 import shutil
+import sys
 
 GPT = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(GPT)
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import bundle_skills  # noqa: E402
 
-REPORT = ("daily-report", "mtd-report", "monthly-report")
-EXTERNAL = ("naver-search", "naver-news", "naver-blog", "weather-impact")
-MEDIA_MIX = ("media-mix-result",)
-KIT_FILES = ("report_kit.py", "report_kit.css", "fees.py", "fees_legacy.py", "saved_responses.py")
 HOOKS = ("capture_ad_performance.py", "capture_change_raw.py", "save_responses.py")
 
 NOTE_HEAD = """> 🧩 **ChatGPT/Codex 환경**
@@ -53,69 +51,6 @@ NOTE = {
 }
 
 
-def family(name):
-    if name in REPORT:
-        return "report"
-    if name.startswith("overall-summary"):
-        return "overall"
-    if name in EXTERNAL:
-        return "external"
-    if name in MEDIA_MIX:
-        return "media-mix"
-    return None
-
-
-def copy_shared(dst, fam):
-    src, out = os.path.join(ROOT, "shared"), os.path.join(dst, "shared")
-    if fam == "report":
-        shutil.copytree(os.path.join(src, "report_engine"), os.path.join(out, "report_engine"), ignore=IGNORE)
-        os.makedirs(os.path.join(out, "references"), exist_ok=True)
-        shutil.copyfile(os.path.join(src, "references", "report-artifact-schema.md"),
-                        os.path.join(out, "references", "report-artifact-schema.md"))
-    elif fam == "overall":
-        os.makedirs(os.path.join(out, "assets"), exist_ok=True)
-        for f in KIT_FILES:
-            shutil.copyfile(os.path.join(src, "assets", f), os.path.join(out, "assets", f))
-        shutil.copytree(os.path.join(src, "references"), os.path.join(out, "references"), ignore=IGNORE)
-    elif fam == "external":
-        shutil.copytree(os.path.join(src, "assets", "external_context"), os.path.join(out, "assets", "external_context"),
-                        ignore=IGNORE)
-        os.makedirs(os.path.join(out, "references"), exist_ok=True)
-        shutil.copyfile(os.path.join(src, "references", "mcp-tools.md"), os.path.join(out, "references", "mcp-tools.md"))
-    elif fam == "media-mix":   # 저장 훅 응답 리더만
-        os.makedirs(os.path.join(out, "assets"), exist_ok=True)
-        shutil.copyfile(os.path.join(src, "assets", "saved_responses.py"), os.path.join(out, "assets", "saved_responses.py"))
-
-
-def rewrite(path, pairs):
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    for a, b in pairs:
-        text = text.replace(a, b)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(text)
-
-
-def inline_overall(dst):
-    """overall-summary-* 하위 스킬: ../overall-summary/ 의 assets·문서를 자기 폴더로 넣는다."""
-    base = os.path.join(ROOT, "skills", "overall-summary")
-    shutil.copytree(os.path.join(base, "assets"), os.path.join(dst, "assets"), ignore=IGNORE, dirs_exist_ok=True)
-    refs = os.path.join(dst, "references")
-    os.makedirs(refs, exist_ok=True)
-    for name in os.listdir(base):
-        if name.startswith("overall-summary-section-") and name.endswith(".md"):
-            shutil.copyfile(os.path.join(base, name), os.path.join(refs, name))
-    main = os.path.join(refs, "overall-summary.md")
-    shutil.copyfile(os.path.join(base, "SKILL.md"), main)
-    # 본 스킬 문서 안의 섹션 문서 이름은 references/ 아래로
-    rewrite(main, [(f"`{n}`", f"`references/{n}`") for n in os.listdir(refs) if n.startswith("overall-summary-section-")])
-    rewrite(os.path.join(dst, "SKILL.md"), [
-        ("../overall-summary/SKILL.md", "references/overall-summary.md"),
-        ("../overall-summary/assets/", "assets/"),
-        ("../overall-summary/overall-summary-section-", "references/overall-summary-section-"),
-    ])
-
-
 def add_note(path, note):
     with open(path, encoding="utf-8") as f:
         text = f.read()
@@ -134,18 +69,8 @@ def copy_skill(name):
     src = os.path.join(ROOT, "skills", name)
     dst = os.path.join(GPT, "skills", name)
     shutil.rmtree(dst, ignore_errors=True)
-    shutil.copytree(src, dst, ignore=IGNORE)
-    fam = family(name)
-    if fam:
-        copy_shared(dst, fam)
-    if fam == "overall" and name != "overall-summary":
-        inline_overall(dst)
-    # 플러그인 루트 기준 경로 → 번들 안 shared/
-    for dirpath, _, files in os.walk(dst):
-        for f in files:
-            if f.endswith(".md"):
-                rewrite(os.path.join(dirpath, f), [("`../../shared/references/`", "`shared/references/`"),
-                                                   ("../../shared/references/", "shared/references/")])
+    shutil.copytree(src, dst, ignore=IGNORE)   # Claude판 스킬 폴더가 이미 자기완결이다(bundle_skills)
+    fam = bundle_skills.family(name)
     meta = os.path.join(GPT, "agents-meta", f"{name}.yaml")
     if os.path.exists(meta):
         os.makedirs(os.path.join(dst, "agents"), exist_ok=True)
@@ -158,6 +83,7 @@ def copy_skill(name):
 
 
 def main():
+    bundle_skills.bundle()
     names = sorted(n for n in os.listdir(os.path.join(ROOT, "skills")) if os.path.isdir(os.path.join(ROOT, "skills", n)))
     for stale in os.listdir(os.path.join(GPT, "skills")):   # Claude판에서 없어진 스킬(예: laighthouse-report)
         if stale not in names:

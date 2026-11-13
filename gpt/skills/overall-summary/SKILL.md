@@ -42,8 +42,7 @@ MCP 데이터를 받아 **종합 리포트**(HTML 한 파일 + 같은 폴더·�
   엑셀은 같은 이름 = Gross·`_net.xlsx` = Net). 환산 규칙은 `shared/references/mcp-tools.md` 2절, 종합 리포트 동작은 `overall-summary-section-2-summary.md`.
 - **Comment는 빌더가 규칙으로 쓴다** — 모델이 요약 문장을 쓰지 않는다(`overall-summary-section-1-comment.md`).
 - **Campaign History도 빌더가 규칙으로 만든다** — 변경 이력 원본(`list_campaign_change_raw`)을 모델이 읽지 않는다(`overall-summary-section-4-history.md`).
-- 도구 규칙: `shared/references/mcp-tools.md`, 차원 확인·크기 대응: `shared/references/pivot-table.md`
-  (플러그인 루트 기준 — 이 스킬 폴더에서는 `shared/references/`).
+- 도구 규칙: `shared/references/mcp-tools.md`, 차원 확인·크기 대응: `shared/references/pivot-table.md`(이 스킬 폴더 기준).
 
 ## 데이터 처리 원칙 (절대 지침)
 
