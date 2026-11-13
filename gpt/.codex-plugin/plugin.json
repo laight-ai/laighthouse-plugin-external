@@ -1,6 +1,6 @@
 {
   "name": "laighthouse-plugin-external",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "라이트하우스 분석 플러그인 — 일간·MTD·월 마감 보고서, 종합 리포트(HTML + 엑셀, 섹션별 하위 스킬), 외부 요인 보고서(네이버 검색량·뉴스·블로그, 날씨)와 네이버 광고 운영 가이드를 제공합니다.",
   "author": {
     "name": "LaightAI"
