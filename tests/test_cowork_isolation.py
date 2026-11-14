@@ -174,4 +174,7 @@ def test_media_mix_result_builds_from_a_saved_response(tmp_path):
     job = os.path.join(HERE, "fixtures", "media_mix", "job-even.json")
     res = json.loads(ok(run(["assets/build_report.py", "--brand", "테스트", "--json", job, "--out", str(out)],
                             skill, tmp_path)).stdout)
-    assert res["out"] == str(out).replace("\\", "/") and out.stat().st_size > 100_000
+    assert res["out"] == str(out).replace("\\", "/")
+    html = out.read_text(encoding="utf-8")
+    # 그리기 코드와 모양이 인라인되고 자리표시가 남지 않는다
+    assert "function summaryTable" in html and ".mm-summary" in html and "__MM_VIEW_JS__" not in html
