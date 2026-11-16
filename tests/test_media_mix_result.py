@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""media-mix-result 스킬 자체 검사(표준 라이브러리 + node). 성공하면 "ok".
+"""nextmonth-budget-planning 스킬 자체 검사(표준 라이브러리 + node). 성공하면 "ok".
 
 - build_report.py: 저장 훅이 남긴 get_media_mix_job 응답 중 무엇을 고르는지(끝난 응답, 없으면 부를 호출,
   도구 에러), 그리고 응답을 <script> 안에 안전하게 넣는지.
@@ -17,7 +17,7 @@ import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ASSETS = os.path.normpath(os.path.join(HERE, "..", "skills", "media-mix-result", "assets"))
+ASSETS = os.path.normpath(os.path.join(HERE, "..", "skills", "nextmonth-budget-planning", "assets"))
 FIXTURES = os.path.join(HERE, "fixtures", "media_mix")
 
 # 다른 스킬·보고서 엔진에도 build_report.py가 있다 — 모듈 이름이 겹치지 않게 파일에서 직접 읽는다

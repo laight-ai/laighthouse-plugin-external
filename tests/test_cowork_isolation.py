@@ -163,13 +163,13 @@ def test_overall_skill_builds_html_and_xlsx(tmp_path, name):
 
 
 def test_media_mix_result_without_saved_responses_asks_for_json(tmp_path):
-    skill = mount(tmp_path, "media-mix-result")
+    skill = mount(tmp_path, "nextmonth-budget-planning")
     res = json.loads(ok(run(["assets/build_report.py", "--brand", "테스트", "--job-id", "abc"], skill, tmp_path)).stdout)
     assert "저장된 응답이 없다" in res["note"], res
 
 
 def test_media_mix_result_builds_from_a_saved_response(tmp_path):
-    skill = mount(tmp_path, "media-mix-result")
+    skill = mount(tmp_path, "nextmonth-budget-planning")
     out = tmp_path / "mm.html"
     job = os.path.join(HERE, "fixtures", "media_mix", "job-even.json")
     res = json.loads(ok(run(["assets/build_report.py", "--brand", "테스트", "--json", job, "--out", str(out)],
