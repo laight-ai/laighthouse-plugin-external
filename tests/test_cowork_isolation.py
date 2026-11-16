@@ -160,21 +160,3 @@ def test_overall_skill_builds_html_and_xlsx(tmp_path, name):
     res = json.loads(ok(run(["assets/build_report.py"], skill, tmp_path, stdin=json.dumps(p))).stdout)
     assert res["out"] == str(out) and out.exists()
     assert res.get("xlsx") and os.path.exists(res["xlsx"]), res
-
-
-def test_media_mix_result_without_saved_responses_asks_for_json(tmp_path):
-    skill = mount(tmp_path, "nextmonth-budget-planning")
-    res = json.loads(ok(run(["assets/build_report.py", "--brand", "테스트", "--job-id", "abc"], skill, tmp_path)).stdout)
-    assert "저장된 응답이 없다" in res["note"], res
-
-
-def test_media_mix_result_builds_from_a_saved_response(tmp_path):
-    skill = mount(tmp_path, "nextmonth-budget-planning")
-    out = tmp_path / "mm.html"
-    job = os.path.join(HERE, "fixtures", "media_mix", "job-even.json")
-    res = json.loads(ok(run(["assets/build_report.py", "--brand", "테스트", "--json", job, "--out", str(out)],
-                            skill, tmp_path)).stdout)
-    assert res["out"] == str(out).replace("\\", "/")
-    html = out.read_text(encoding="utf-8")
-    # 그리기 코드와 모양이 인라인되고 자리표시가 남지 않는다
-    assert "function summaryTable" in html and ".mm-summary" in html and "__MM_VIEW_JS__" not in html
