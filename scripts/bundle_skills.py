@@ -13,6 +13,10 @@
     python3 scripts/bundle_skills.py --check   # 어긋난 파일만 출력하고 0이 아닌 값으로 끝낸다
 
 GPT판(gpt/sync_from_claude.py)도 이 스크립트로 Claude판 스킬 폴더를 맞춘 뒤 그 폴더를 그대로 복사한다.
+
+세 플러그인이 함께 쓰는 파일(어느 파일인지는 레포 루트 common.json)의 원본은 laighthouse-plugin-common 레포다.
+공통 레포에서 고치고 태그를 붙인 뒤 common.json의 version을 바꾸고 `python3 ../laighthouse-plugin-common/sync.py`로
+가져온 다음 이 스크립트를 실행한다.
 """
 import argparse
 import os

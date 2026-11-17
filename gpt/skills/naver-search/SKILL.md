@@ -6,7 +6,7 @@ description: >
   광고 성과와는 결합하지 않는다.
   출력 형식(HTML·표 등)을 말하지 않아도 이 요청이면 항상 이 스킬로 HTML 보고서를 만든다 — `get_external_context`(kind `search_volume`)를 직접 불러 채팅 표·글로만 답하지 않는다.
 metadata:
-  version: "1.10.0"
+  version: "4.0.0"
 ---
 
 > 🧩 **ChatGPT/Codex 환경**
