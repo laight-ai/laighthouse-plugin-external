@@ -10,8 +10,10 @@ python gpt/sync_from_claude.py
 
 > **스킬 폴더는 자기완결이다(Claude판도 같다).** Claude 데스크톱 Cowork는 스킬 폴더 하나만 올리고, 웹 Chat은 스킬 zip 하나만 받는다.
 > 그래서 스킬마다 필요한 공용 파일(`shared/`)과 `overall-summary`의 스크립트·문서를 `scripts/bundle_skills.py`가 스킬 폴더 안으로 복사한다.
-> 원본은 레포 루트 `shared/`와 `skills/overall-summary/`뿐이다 — 사본(`skills/<스킬>/shared/`, `overall-summary-*`의 `assets/`·`references/`)은
-> 고치지 말고, 원본을 고친 뒤 `python3 scripts/bundle_skills.py`(또는 위 sync — 먼저 번들을 맞춘다)를 실행한다. 스킬 문서와 스크립트는
+> 원본은 레포 루트 `shared/`와 `skills/overall-summary/`다 — 사본(`skills/<스킬>/shared/`, `overall-summary-*`의 `assets/`·`references/`)은
+> 고치지 말고, 원본을 고친 뒤 `python3 scripts/bundle_skills.py`(또는 위 sync — 먼저 번들을 맞춘다)를 실행한다.
+> 그중 레포 루트 `common.json`에 적힌 경로(훅, external_context, overall-summary와 그 킷 등)는 laighthouse-plugin-common 레포의
+> 사본이므로 공통 레포에서 고치고 `python3 ../laighthouse-plugin-common/sync.py`로 가져온다(`scripts/bundle_skills.py` docstring 참고). 스킬 문서와 스크립트는
 > 스킬 폴더 밖(`../`)을 가리키지 않는다. `python3 scripts/bundle_skills.py --check`와 `tests/test_cowork_isolation.py`가 이를 검사한다.
 
 ## 배포 형태

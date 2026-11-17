@@ -7,7 +7,7 @@ description: >
   (디멘전·지표 설정, 접기), 매체 변경 기록으로 만든 캠페인 변경 이력(Campaign History), 예산·단가를 입력해 예상 성과를 보는 Mix 계획표를
   담은 HTML 보고서와, 같은 내용을 시트로 나눈 엑셀(.xlsx — Summary·By Media·By Date·History·Mix·Raw)을 함께 만든다. 사용자가 말한 브랜드의 차원·지표를 실행 시작에 디스커버리해서 어떤 브랜드에도 같은 방식으로 동작한다.
 metadata:
-  version: "1.6.0"
+  version: "4.0.0"
 ---
 
 > 🧩 **ChatGPT/Codex 환경**
@@ -42,7 +42,8 @@ MCP 데이터를 받아 **종합 리포트**(HTML 한 파일 + 같은 폴더·�
   엑셀은 같은 이름 = Gross·`_net.xlsx` = Net). 환산 규칙은 `shared/references/mcp-tools.md` 2절, 종합 리포트 동작은 `overall-summary-section-2-summary.md`.
 - **Comment는 빌더가 규칙으로 쓴다** — 모델이 요약 문장을 쓰지 않는다(`overall-summary-section-1-comment.md`).
 - **Campaign History도 빌더가 규칙으로 만든다** — 변경 이력 원본(`list_campaign_change_raw`)을 모델이 읽지 않는다(`overall-summary-section-4-history.md`).
-- 도구 규칙: `shared/references/mcp-tools.md`, 차원 확인·크기 대응: `shared/references/pivot-table.md`(이 스킬 폴더 기준).
+- 도구 규칙: `shared/references/mcp-tools.md`, 차원 확인·크기 대응: `shared/references/pivot-table.md`
+  (이 스킬 폴더 기준 — 플러그인 루트 `shared/`의 사본이다).
 
 ## 데이터 처리 원칙 (절대 지침)
 

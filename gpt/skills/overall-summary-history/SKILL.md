@@ -4,7 +4,7 @@ description: >
   종합 리포트의 Campaign History(캠페인 변경 이력)만 뽑는 스킬. "종합 리포트 history", "변경 이력", "캠페인 변경 히스토리", "overall summary history" 요청 시 사용. 매체(Google·Meta·TikTok·네이버·카카오)가 남긴 캠페인·광고그룹·광고 변경 기록을 일 · 미디어 · 단계 · 대상 · 변경 사항(ON/OFF·예산 증액/감액·소재·타겟팅 등) · 상세 표로 정리한 HTML과 History 시트 엑셀을 만든다.
   사용자가 말한 브랜드의 차원을 실행 시작에 디스커버리해서 어떤 브랜드에도 같은 방식으로 동작한다.
 metadata:
-  version: "1.0.0"
+  version: "4.0.0"
 ---
 
 > 🧩 **ChatGPT/Codex 환경**
@@ -20,7 +20,7 @@ metadata:
 
 종합 리포트(`overall-summary`)에서 **Campaign History만** 뽑아 HTML 한 파일과 History 시트만 담은 엑셀(.xlsx)을 만든다.
 스크립트·규칙·데이터 처리 원칙은 `overall-summary`와 같다 — **`references/overall-summary.md`를 먼저 읽고 그대로 따른다.**
-이 문서는 거기서 달라지는 점만 적는다. 스크립트는 `assets/`에 있다(이 스킬 폴더 기준).
+이 문서는 거기서 달라지는 점만 적는다. 스크립트는 `assets/`, 섹션 규칙은 `references/`에 있다(이 스킬 폴더 기준 — `overall-summary`의 사본이다).
 
 - 파라미터(브랜드명·기준일 E = 데이터 마지막 날, 기본 어제·오늘 이후 불가·시작일 S)와 기간 계산(S 기본 = E의 전월 1일, 366일까지)은 `overall-summary`와 같다.
 - 섹션 규칙: `references/overall-summary-section-4-history.md`

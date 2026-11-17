@@ -13,6 +13,12 @@
     python3 scripts/bundle_skills.py --check   # 어긋난 파일만 출력하고 0이 아닌 값으로 끝낸다
 
 GPT판(gpt/sync_from_claude.py)도 이 스크립트로 Claude판 스킬 폴더를 맞춘 뒤 그 폴더를 그대로 복사한다.
+
+세 플러그인이 함께 쓰는 파일(어느 파일인지는 레포 루트 common.json)의 원본은 laighthouse-plugin-common 레포다.
+공통 레포에서 고치고 태그를 붙인 뒤 common.json의 version을 바꾸고 `python3 ../laighthouse-plugin-common/sync.py`로
+가져온 다음 이 스크립트를 실행한다. 공통 레포에서 받는 스킬의 SKILL.md `metadata.version`은 그 스킬이 마지막으로 바뀐
+공통 레포 태그를 따르므로 이 레포에서 올리지 않는다. 플러그인 릴리스 버전(plugin.json·marketplace.json·gpt/.codex-plugin)은
+공통 레포 태그를 새로 받을 때도 올린다.
 """
 import argparse
 import os

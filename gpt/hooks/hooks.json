@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/hooks/capture_ad_performance.py\"",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/capture_ad_performance.py\" --any-group-by --short-stub",
             "timeout": 30,
             "statusMessage": "큰 성과 응답을 파일로 저장 중"
           }
