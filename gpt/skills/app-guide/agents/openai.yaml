@@ -1,0 +1,7 @@
+interface:
+  display_name: "라이트하우스 화면 사용법"
+  short_description: "라이트하우스 웹 화면의 메뉴 위치와 사용 순서를 안내합니다."
+  brand_color: "#3F8F73"
+
+policy:
+  allow_implicit_invocation: true
