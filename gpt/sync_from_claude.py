@@ -26,7 +26,7 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import bundle_skills  # noqa: E402
 
-HOOKS = ("capture_ad_performance.py", "capture_change_raw.py", "save_responses.py")
+HOOKS = ("ad_performance_domain.py", "ad_performance_domain.md", "capture_ad_performance.py", "capture_change_raw.py", "save_responses.py")
 
 NOTE_HEAD = """> 🧩 **ChatGPT/Codex 환경**
 > - 응답 저장 훅(`hooks/save_responses.py`·`capture_*.py`)은 ChatGPT 데스크톱 Work 모드·Codex에서 `/hooks`로 신뢰했을 때만 돈다.
