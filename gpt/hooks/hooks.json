@@ -13,6 +13,17 @@
         ]
       },
       {
+        "matcher": ".*get_ad_performance$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/ad_performance_domain.py\"",
+            "timeout": 30,
+            "statusMessage": "광고 성과 도메인 규칙 붙이는 중"
+          }
+        ]
+      },
+      {
         "matcher": ".*list_campaign_change_raw$",
         "hooks": [
           {
