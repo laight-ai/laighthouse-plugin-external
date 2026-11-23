@@ -13,7 +13,7 @@
 - skills/<스킬>/ → gpt/skills/<스킬>/ (통째로 교체, __pycache__ 제외)
 - gpt/agents-meta/<스킬>.yaml → gpt/skills/<스킬>/agents/openai.yaml (ChatGPT 스킬 메타)
 - 첫 제목 아래에 ChatGPT/Codex 환경 안내(GPT_NOTE)를 넣는다(스킬 계열별)
-- hooks/*.py → gpt/hooks/ (hooks.json은 gpt/ 쪽 것을 유지 — ${PLUGIN_ROOT} 기준)
+- hooks/의 HOOKS 목록 파일 → gpt/hooks/ (hooks.json은 gpt/ 쪽 것을 유지 — ${PLUGIN_ROOT} 기준)
 """
 import os
 import re
@@ -94,7 +94,7 @@ def main():
         print("skill", name)
     os.makedirs(os.path.join(GPT, "hooks"), exist_ok=True)
     for old in os.listdir(os.path.join(GPT, "hooks")):
-        if old.endswith(".py") and old not in HOOKS:
+        if old != "hooks.json" and old not in HOOKS:
             os.remove(os.path.join(GPT, "hooks", old))
             print("removed hook", old)
     for h in HOOKS:
