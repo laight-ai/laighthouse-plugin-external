@@ -29,7 +29,7 @@ python gpt/sync_from_claude.py
 |---|---|---|
 | 매니페스트 | `.claude-plugin/plugin.json` | `gpt/.codex-plugin/plugin.json` + 스킬별 `agents/openai.yaml`(원본은 `gpt/agents-meta/`) |
 | MCP | `.mcp.json` (`"type": "http"`) | `gpt/.mcp.json` (`"type": "streamable-http"`) |
-| 훅 | `hooks/hooks.json` (`${CLAUDE_PLUGIN_ROOT}`) | `gpt/hooks/hooks.json` (`${PLUGIN_ROOT}`, 접미 매칭 matcher) — 스크립트(`save_responses.py`·`capture_*.py`)는 같은 파일 |
+| 훅 | `hooks/hooks.json` (`${CLAUDE_PLUGIN_ROOT}`) | `gpt/hooks/hooks.json` (`${PLUGIN_ROOT}`, 접미 매칭 matcher) — 스크립트(`save_responses.py`·`capture_*.py`·`ad_performance_domain.py`)는 같은 파일. SessionStart(compact) 등록은 Claude판에만 있어 GPT판은 압축 뒤 도메인 규칙을 다시 넣지 않는다 |
 | SKILL.md | 원본 | 첫 제목 아래 ChatGPT/Codex 환경 안내만 추가(스킬 계열별 — 훅이 없는 웹 Chat에서의 응답 저장 방법) |
 
 ## 설치 A — 플러그인 (ChatGPT 데스크톱 Work 모드 / Codex)
@@ -39,7 +39,7 @@ python gpt/sync_from_claude.py
 2. Plugins Directory에서 소스 "Laighthouse External"을 선택해 **Laighthouse Report**를 설치합니다(MCP 인증은 설치 시).
    스킬: `daily-report`·`mtd-report`·`monthly-report`, `overall-summary`(+ `-comment`·`-total`·`-tables`·`-history`·`-mix`),
    `naver-search`·`naver-news`·`naver-blog`·`weather-impact`, `naver-ads-guide`, `nextmonth-budget-planning`, `app-guide`.
-3. 대화에서 `/hooks`를 열어 `save_responses.py`·`capture_ad_performance.py`·`capture_change_raw.py`를 신뢰합니다. 신뢰하지 않아도 스킬은 동작하지만, 모델이 응답을
+3. 대화에서 `/hooks`를 열어 `save_responses.py`·`capture_ad_performance.py`·`capture_change_raw.py`·`ad_performance_domain.py`(get_ad_performance 응답에 광고 성과 도메인 규칙 주입)를 신뢰합니다. 신뢰하지 않아도 스킬은 동작하지만, 모델이 응답을
    직접 파일로 저장해야 해서 느리고 큰 응답 섹션은 빠질 수 있습니다. 실행 환경에 `python3`가 필요합니다.
 
 ## 설치 B — 스킬 zip (chatgpt.com 웹 Chat)
