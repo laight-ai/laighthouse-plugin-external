@@ -41,6 +41,7 @@ python gpt/sync_from_claude.py
    `naver-search`·`naver-news`·`naver-blog`·`weather-impact`, `naver-ads-guide`, `nextmonth-budget-planning`, `media-mix-backtest-check`, `app-guide`.
 3. 대화에서 `/hooks`를 열어 `save_responses.py`·`capture_ad_performance.py`·`capture_change_raw.py`·`ad_performance_domain.py`(get_ad_performance 응답에 광고 성과 도메인 규칙 주입)를 신뢰합니다. 신뢰하지 않아도 스킬은 동작하지만, 모델이 응답을
    직접 파일로 저장해야 해서 느리고 큰 응답 섹션은 빠질 수 있습니다. 실행 환경에 `python3`가 필요합니다.
+   `media-mix-backtest-check`는 저장 훅이 남긴 응답만 읽으므로 훅을 신뢰해야 동작합니다(웹 Chat zip은 만들지 않습니다).
 
 ## 설치 B — 스킬 zip (chatgpt.com 웹 Chat)
 
