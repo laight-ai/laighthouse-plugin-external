@@ -1,6 +1,6 @@
 interface:
   display_name: "다음 달 예산 계획"
-  short_description: "다음 달 매체별 예산 배분을 계산하고, 사용자 피드백을 반영해 HTML 보고서로 만듭니다."
+  short_description: "다음 달 매체별 예산 배분을 계산해 의견과 함께 보여 주고, 사용자 피드백을 반영합니다."
   brand_color: "#3F8F73"
 
 policy:
