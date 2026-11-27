@@ -31,6 +31,7 @@ OVERALL = "overall-summary"
 
 REPORT = ("daily-report", "mtd-report", "monthly-report")
 EXTERNAL = ("naver-search", "naver-news", "naver-blog", "weather-impact")
+BACKTEST = ("media-mix-backtest-check",)
 KIT_FILES = ("report_kit.py", "report_kit.css", "fees.py", "fees_legacy.py", "saved_responses.py")
 
 # 계열마다 스킬 폴더의 shared/ 아래로 넣을 것 — 플러그인 shared/ 기준 경로, 폴더면 통째로
@@ -38,6 +39,7 @@ SHARED_BY_FAMILY = {
     "report": ("report_engine", "references/report-artifact-schema.md"),
     "overall": tuple(f"assets/{f}" for f in KIT_FILES) + ("references",),
     "external": ("assets/external_context", "references/mcp-tools.md"),
+    "backtest": ("assets/saved_responses.py", "references/mcp-tools.md"),   # 저장 응답을 읽는다
 }
 
 
@@ -48,6 +50,8 @@ def family(name):
         return "overall"
     if name in EXTERNAL:
         return "external"
+    if name in BACKTEST:
+        return "backtest"
     return None
 
 

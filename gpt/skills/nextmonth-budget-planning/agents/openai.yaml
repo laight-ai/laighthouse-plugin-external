@@ -1,7 +1,40 @@
 interface:
-  display_name: "미디어믹스 결과 보고서"
-  short_description: "월간 미디어믹스 결과를 라이트하우스 웹 결과 화면과 같은 HTML 보고서로 만듭니다."
+  display_name: "다음 달 예산 계획"
+  short_description: "다음 달 매체별 예산 배분을 계산해 의견과 함께 보여 주고, 사용자 피드백을 반영합니다."
   brand_color: "#3F8F73"
 
 policy:
   allow_implicit_invocation: true
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "list_media_mix_metrics"
+      description: "예산 계획에 쓸 비용·성과 지표 후보를 조회합니다."
+    - type: "mcp"
+      value: "start_media_mix_plan"
+      description: "확인받은 조건으로 예산안 계산을 시작합니다."
+    - type: "mcp"
+      value: "list_media_mix_plans"
+      description: "내가 시작한 예산 계획 목록을 조회합니다."
+    - type: "mcp"
+      value: "get_media_mix_plan"
+      description: "예산 계획의 조건·계산 상태·매체별 월 합계를 조회합니다."
+    - type: "mcp"
+      value: "propose_media_mix_claim"
+      description: "사용자 피드백 하나를 검증해 반영 전 상태로 저장합니다."
+    - type: "mcp"
+      value: "apply_media_mix_claim"
+      description: "사용자가 확인한 피드백을 계획에 반영하고 다시 계산합니다."
+    - type: "mcp"
+      value: "remove_media_mix_claim"
+      description: "반영한 피드백 하나를 되돌리고 다시 계산합니다."
+    - type: "mcp"
+      value: "reset_media_mix_plan"
+      description: "반영한 피드백을 모두 되돌립니다."
+    - type: "mcp"
+      value: "set_media_mix_fill_remainder"
+      description: "사용자가 먼저 요청할 때만 잔여 예산을 남겨 두거나 다시 채웁니다."
+    - type: "mcp"
+      value: "get_media_mix_reward_curves"
+      description: "매체별 비용 대비 효과 곡선을 조회합니다."

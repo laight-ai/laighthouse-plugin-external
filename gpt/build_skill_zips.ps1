@@ -208,9 +208,12 @@ Write-Host "출력 위치: $OutDir"
 Write-Host ""
 
 $failed = 0
+# 저장 훅이 남긴 응답만 읽는 스킬 — 훅이 없는 웹 Chat에서는 동작하지 않으므로 zip을 만들지 않는다
+$HookOnly = @('media-mix-backtest-check')
 
 foreach ($dir in $skillDirs) {
     $name    = $dir.Name
+    if ($HookOnly -contains $name) { Write-Host "건너뜀(저장 훅 필요): $name"; continue }
     $zipPath = Join-Path $OutDir "$name.zip"
 
     $files = @(Get-BundleFiles -SkillPath $dir.FullName -SkillName $name)
